@@ -463,7 +463,7 @@ class KPDataGenerator:
                 position_str = self.format_position(last_planet_data)
 
                 # Format aspects/events - only show new aspects
-                aspects_str = "; ".join(new_aspects) if new_aspects else "None"
+                aspects_str = "; ".join(new_aspects) if new_aspects else ""
 
                 transitions.append({
                     "Start Time": planet_start_time.strftime("%H:%M"),

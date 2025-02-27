@@ -152,7 +152,71 @@ class ExcelExporter:
                     for col_idx in range(len(df.columns)):
                         # Use aspects format specifically for the aspects column
                         if df.columns[col_idx] == 'Aspects':
-                            worksheet.write(row_num, col_idx, df.iloc[row_num - 1, col_idx], aspects_format)
+                            aspect_value = df.iloc[row_num - 1, col_idx]
+
+                            # Skip if no aspects or "None"
+                            if not aspect_value or aspect_value == "None":
+                                worksheet.write(row_num, col_idx, aspect_value, aspects_format)
+                                continue
+
+                            # Check if the cell contains yoga information
+                            contains_positive_yoga = False
+                            contains_negative_yoga = False
+
+                            # Define which yogas are negative
+                            negative_yogas = [
+                                "Vish Yoga", "Angarak Yoga", "Guru Chandala Yoga",
+                                "Graha Yuddha", "Kemadruma Yoga", "Kala Sarpa Yoga"
+                            ]
+
+                            # Check each yoga in the aspects cell
+                            if isinstance(aspect_value, str) and "Yoga" in aspect_value:
+                                for yoga in aspect_value.split("; "):
+                                    if "Yoga" in yoga:
+                                        # Check if it matches any negative yoga
+                                        is_negative = any(neg_yoga in yoga for neg_yoga in negative_yogas)
+                                        if is_negative:
+                                            contains_negative_yoga = True
+                                        else:
+                                            contains_positive_yoga = True
+
+                            # Apply formatting based on yoga type
+                            if contains_positive_yoga and not contains_negative_yoga:
+                                # Positive yoga - green background
+                                positive_format = workbook.add_format({
+                                    'border': 1,
+                                    'align': 'left',
+                                    'text_wrap': True,
+                                    'valign': 'top',
+                                    'bg_color': '#E2EFDA'  # Light green
+                                })
+                                worksheet.write(row_num, col_idx, aspect_value, positive_format)
+
+                            elif contains_negative_yoga and not contains_positive_yoga:
+                                # Negative yoga - red background
+                                negative_format = workbook.add_format({
+                                    'border': 1,
+                                    'align': 'left',
+                                    'text_wrap': True,
+                                    'valign': 'top',
+                                    'bg_color': '#FFCCCC'  # Light red
+                                })
+                                worksheet.write(row_num, col_idx, aspect_value, negative_format)
+
+                            elif contains_positive_yoga and contains_negative_yoga:
+                                # Mixed yogas - yellow background
+                                mixed_format = workbook.add_format({
+                                    'border': 1,
+                                    'align': 'left',
+                                    'text_wrap': True,
+                                    'valign': 'top',
+                                    'bg_color': '#FFF2CC'  # Light yellow
+                                })
+                                worksheet.write(row_num, col_idx, aspect_value, mixed_format)
+
+                            else:
+                                # No yogas - use the default aspect format
+                                worksheet.write(row_num, col_idx, aspect_value, aspects_format)
                         else:
                             worksheet.write(row_num, col_idx, df.iloc[row_num - 1, col_idx], row_format)
 
@@ -177,3 +241,14 @@ class ExcelExporter:
         print(f"Excel file created: {filename}")
 
         return filename
+
+    # In the ExcelExporter class, add a method to determine if a yoga is positive or negative
+    def is_positive_yoga(self, yoga_name):
+        """Determine if a yoga is considered positive"""
+        negative_yogas = [
+            "Vish Yoga", "Angarak Yoga", "Guru Chandala Yoga",
+            "Graha Yuddha", "Kemadruma Yoga", "Kala Sarpa Yoga"
+        ]
+
+        # If the yoga is in the negative list, it's not positive
+        return yoga_name not in negative_yogas
