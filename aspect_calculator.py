@@ -35,6 +35,13 @@ class AspectCalculator:
             180: {"name": "Opposition", "orb": 10, "symbol": "☍"}
         }
 
+        # Set default selected aspects (0, 90, 180)
+        self.selected_aspects = [0, 90, 180]
+
+        # Set default selected planets
+        self.selected_planets = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Rahu", "Ketu",
+                                 "Ascendant"]
+
         # Yoga definitions
         self.yogas = [
             {"name": "Budha-Aditya Yoga", "condition": self._check_budha_aditya},
@@ -42,6 +49,14 @@ class AspectCalculator:
             {"name": "Vish Yoga", "condition": self._check_vish_yoga},
             {"name": "Neech Bhanga Raja Yoga", "condition": self._check_neech_bhanga}
         ]
+
+    def set_selected_aspects(self, aspects):
+        """Set the aspects to be calculated"""
+        self.selected_aspects = aspects
+
+    def set_selected_planets(self, planets):
+        """Set the planets to calculate aspects for"""
+        self.selected_planets = planets
 
     def calculate_aspects(self, chart, planets_data):
         """Calculate important aspects between planets"""
@@ -52,6 +67,20 @@ class AspectCalculator:
         # Extract planet positions and retrograde status
         for planet in planets_data:
             name = planet.Object
+
+            # Get the display name for this planet (to check against selected_planets)
+            display_name = name
+            if name == "North Node":
+                display_name = "Rahu"
+            elif name == "South Node":
+                display_name = "Ketu"
+            elif name == "Asc":
+                display_name = "Ascendant"
+
+            # Skip planets that aren't in our selected list
+            if display_name not in self.selected_planets:
+                continue
+
             planet_positions[name] = planet.LonDecDeg
             planet_retrograde[name] = planet.isRetroGrade
 
@@ -63,22 +92,22 @@ class AspectCalculator:
                 p1 = planet_keys[i]
                 p2 = planet_keys[j]
 
-                # Skip if either is not a major planet
-                if p1 not in self.planet_short_names or p2 not in self.planet_short_names:
-                    continue
-
                 # Calculate the angular distance
                 degree_diff = abs(planet_positions[p1] - planet_positions[p2])
                 if degree_diff > 180:
                     degree_diff = 360 - degree_diff
 
-                # Check if it's a major aspect
-                for angle, aspect_info in self.major_aspects.items():
+                # Check if it's one of our selected aspects
+                for angle in self.selected_aspects:
+                    aspect_info = self.major_aspects.get(angle)
+                    if not aspect_info:
+                        continue
+
                     orb = aspect_info["orb"]
                     if abs(degree_diff - angle) <= orb:
                         # Format retrograde status
-                        p1_name = self.planet_short_names[p1]
-                        p2_name = self.planet_short_names[p2]
+                        p1_name = self.planet_short_names.get(p1, p1)
+                        p2_name = self.planet_short_names.get(p2, p2)
 
                         if planet_retrograde.get(p1):
                             p1_name += "(Ret.)"
@@ -88,8 +117,8 @@ class AspectCalculator:
                         # Calculate exact orb
                         exact_orb = round(abs(degree_diff - angle), 1)
 
-                        # Add the aspect
-                        aspects.append(f"{p1_name} - {p2_name} - {angle}° ({aspect_info['name']})")
+                        # Add the aspect with the symbol
+                        aspects.append(f"{p1_name} {aspect_info['symbol']} {p2_name} ({exact_orb}° orb)")
                         break
 
         return aspects
@@ -111,6 +140,19 @@ class AspectCalculator:
 
         changes = []
         for planet in current_data:
+            # Get the display name for this planet
+            display_name = planet.Object
+            if display_name == "North Node":
+                display_name = "Rahu"
+            elif display_name == "South Node":
+                display_name = "Ketu"
+            elif display_name == "Asc":
+                display_name = "Ascendant"
+
+            # Skip planets that aren't in our selected list
+            if display_name not in self.selected_planets:
+                continue
+
             # Look for the same planet in previous data
             for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
@@ -129,6 +171,19 @@ class AspectCalculator:
 
         changes = []
         for planet in current_data:
+            # Get the display name for this planet
+            display_name = planet.Object
+            if display_name == "North Node":
+                display_name = "Rahu"
+            elif display_name == "South Node":
+                display_name = "Ketu"
+            elif display_name == "Asc":
+                display_name = "Ascendant"
+
+            # Skip planets that aren't in our selected list
+            if display_name not in self.selected_planets:
+                continue
+
             # Look for the same planet in previous data
             for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
@@ -146,6 +201,19 @@ class AspectCalculator:
 
         changes = []
         for planet in current_data:
+            # Get the display name for this planet
+            display_name = planet.Object
+            if display_name == "North Node":
+                display_name = "Rahu"
+            elif display_name == "South Node":
+                display_name = "Ketu"
+            elif display_name == "Asc":
+                display_name = "Ascendant"
+
+            # Skip planets that aren't in our selected list
+            if display_name not in self.selected_planets:
+                continue
+
             # Look for the same planet in previous data
             for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
@@ -220,7 +288,7 @@ class AspectCalculator:
         for planet in planets_data:
             if planet.Object == "Moon":
                 moon_house = planet.HouseNr
-            elif planet.Object in ["Sun", "Mars", "Saturn", "Rahu", "Ketu"]:
+            elif planet.Object in ["Sun", "Mars", "Saturn", "Rahu", "Ketu", "North Node", "South Node"]:
                 if planet.HouseNr:
                     malefic_houses.append(planet.HouseNr)
 

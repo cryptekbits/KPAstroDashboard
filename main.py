@@ -8,7 +8,8 @@ import pytz
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QLineEdit,
                              QDateEdit, QTimeEdit, QCheckBox, QGroupBox, QComboBox,
-                             QProgressBar, QMessageBox, QCompleter)
+                             QProgressBar, QMessageBox, QCompleter, QScrollArea,
+                             QGridLayout)
 from PyQt5.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 
 from kp_data_generator import KPDataGenerator
@@ -20,11 +21,13 @@ class GeneratorThread(QThread):
     finished_signal = pyqtSignal(dict)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, location, start_datetime, sheets_to_generate):
+    def __init__(self, location, start_datetime, sheets_to_generate, selected_aspects, aspect_planets):
         super().__init__()
         self.location = location
         self.start_datetime = start_datetime
         self.sheets_to_generate = sheets_to_generate
+        self.selected_aspects = selected_aspects
+        self.aspect_planets = aspect_planets
 
     def run(self):
         try:
@@ -51,6 +54,10 @@ class GeneratorThread(QThread):
                 ayanamsa="Krishnamurti",
                 house_system="Placidus"
             )
+
+            # Set the selected aspects and aspect planets in the generator
+            generator.aspect_calculator.set_selected_aspects(self.selected_aspects)
+            generator.aspect_calculator.set_selected_planets(self.aspect_planets)
 
             # Define end date time (11:55 PM on the same day)
             end_datetime = self.start_datetime.replace(hour=23, minute=55, second=0)
@@ -102,10 +109,16 @@ class KPAstrologyApp(QMainWindow):
 
     def initUI(self):
         self.setWindowTitle('KP Astrology Nakshatras Generator')
-        self.setGeometry(100, 100, 600, 600)
+        self.setGeometry(100, 100, 800, 700)  # Increased height for new sections
+
+        # Create a scroll area for the main content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
 
         main_widget = QWidget()
-        self.setCentralWidget(main_widget)
+        scroll_area.setWidget(main_widget)
+        self.setCentralWidget(scroll_area)
+
         main_layout = QVBoxLayout(main_widget)
 
         # Location selection
@@ -165,25 +178,124 @@ class KPAstrologyApp(QMainWindow):
             "Saturn", "Rahu", "Ketu", "Uranus", "Neptune"
         ]
 
+        # Create a grid layout for checkboxes (2 columns)
+        grid_layout = QGridLayout()
+        row, col = 0, 0
+        max_col = 2  # Number of columns
+
         for sheet_name in self.sheet_names:
             checkbox = QCheckBox(sheet_name)
             checkbox.setChecked(True)  # All selected by default
             self.sheet_checkboxes[sheet_name] = checkbox
-            sheets_layout.addWidget(checkbox)
+            grid_layout.addWidget(checkbox, row, col)
 
+            col += 1
+            if col >= max_col:
+                col = 0
+                row += 1
+
+        sheets_layout.addLayout(grid_layout)
         main_layout.addWidget(sheets_group)
+
+        # Aspect selection
+        aspects_group = QGroupBox("Aspects to Calculate")
+        aspects_layout = QVBoxLayout()
+        aspects_group.setLayout(aspects_layout)
+
+        self.aspect_checkboxes = {}
+
+        # Define aspects with their symbols and names
+        self.aspects = [
+            {"angle": 0, "name": "Conjunction", "symbol": "☌", "default": True},
+            {"angle": 30, "name": "Semi-Sextile", "symbol": "⚺", "default": False},
+            {"angle": 60, "name": "Sextile", "symbol": "⚹", "default": False},
+            {"angle": 90, "name": "Square", "symbol": "□", "default": True},
+            {"angle": 120, "name": "Trine", "symbol": "△", "default": False},
+            {"angle": 150, "name": "Quincunx", "symbol": "⚻", "default": False},
+            {"angle": 180, "name": "Opposition", "symbol": "☍", "default": True}
+        ]
+
+        # Create a grid layout for aspect checkboxes (3 columns)
+        aspect_grid = QGridLayout()
+        row, col = 0, 0
+        max_col = 3  # Number of columns
+
+        for aspect in self.aspects:
+            checkbox_text = f"{aspect['symbol']} {aspect['name']} ({aspect['angle']}°)"
+            checkbox = QCheckBox(checkbox_text)
+            checkbox.setChecked(aspect["default"])  # Set default selection
+            self.aspect_checkboxes[aspect['angle']] = checkbox
+            aspect_grid.addWidget(checkbox, row, col)
+
+            col += 1
+            if col >= max_col:
+                col = 0
+                row += 1
+
+        aspects_layout.addLayout(aspect_grid)
+        main_layout.addWidget(aspects_group)
+
+        # Planets for aspects selection
+        aspect_planets_group = QGroupBox("Calculate Aspects For")
+        aspect_planets_layout = QVBoxLayout()
+        aspect_planets_group.setLayout(aspect_planets_layout)
+
+        self.aspect_planets_checkboxes = {}
+
+        # Define planets for aspects
+        self.aspect_planets = [
+            {"name": "Sun", "default": True},
+            {"name": "Moon", "default": True},
+            {"name": "Mercury", "default": True},
+            {"name": "Venus", "default": True},
+            {"name": "Mars", "default": True},
+            {"name": "Jupiter", "default": True},
+            {"name": "Saturn", "default": True},
+            {"name": "Rahu", "default": True},
+            {"name": "Ketu", "default": True},
+            {"name": "Ascendant", "default": True},
+            {"name": "Uranus", "default": False},
+            {"name": "Neptune", "default": False}
+        ]
+
+        # Create a grid layout for planet checkboxes (3 columns)
+        planet_grid = QGridLayout()
+        row, col = 0, 0
+        max_col = 3  # Number of columns
+
+        for planet in self.aspect_planets:
+            checkbox = QCheckBox(planet["name"])
+            checkbox.setChecked(planet["default"])
+            self.aspect_planets_checkboxes[planet["name"]] = checkbox
+            planet_grid.addWidget(checkbox, row, col)
+
+            col += 1
+            if col >= max_col:
+                col = 0
+                row += 1
+
+        aspect_planets_layout.addLayout(planet_grid)
+        main_layout.addWidget(aspect_planets_group)
 
         # Selection buttons
         select_layout = QHBoxLayout()
 
-        select_all_btn = QPushButton("Select All")
+        select_all_btn = QPushButton("Select All Sheets")
         select_all_btn.clicked.connect(self.select_all_sheets)
 
-        select_none_btn = QPushButton("Select None")
+        select_none_btn = QPushButton("Select No Sheets")
         select_none_btn.clicked.connect(self.select_no_sheets)
+
+        select_all_aspects_btn = QPushButton("Select All Aspects")
+        select_all_aspects_btn.clicked.connect(self.select_all_aspects)
+
+        select_no_aspects_btn = QPushButton("Select No Aspects")
+        select_no_aspects_btn.clicked.connect(self.select_no_aspects)
 
         select_layout.addWidget(select_all_btn)
         select_layout.addWidget(select_none_btn)
+        select_layout.addWidget(select_all_aspects_btn)
+        select_layout.addWidget(select_no_aspects_btn)
 
         main_layout.addLayout(select_layout)
 
@@ -219,6 +331,14 @@ class KPAstrologyApp(QMainWindow):
 
     def select_no_sheets(self):
         for checkbox in self.sheet_checkboxes.values():
+            checkbox.setChecked(False)
+
+    def select_all_aspects(self):
+        for checkbox in self.aspect_checkboxes.values():
+            checkbox.setChecked(True)
+
+    def select_no_aspects(self):
+        for checkbox in self.aspect_checkboxes.values():
             checkbox.setChecked(False)
 
     def is_file_open(self, filepath):
@@ -257,6 +377,24 @@ class KPAstrologyApp(QMainWindow):
         if not selected_sheets:
             QMessageBox.warning(self, "No Sheets Selected",
                                 "Please select at least one sheet to generate.")
+            return
+
+        # Get selected aspects
+        selected_aspects = [aspect["angle"] for aspect in self.aspects
+                            if self.aspect_checkboxes[aspect["angle"]].isChecked()]
+
+        if not selected_aspects:
+            QMessageBox.warning(self, "No Aspects Selected",
+                                "Please select at least one aspect to calculate.")
+            return
+
+        # Get selected planets for aspects
+        selected_aspect_planets = [planet["name"] for planet in self.aspect_planets
+                                   if self.aspect_planets_checkboxes[planet["name"]].isChecked()]
+
+        if not selected_aspect_planets:
+            QMessageBox.warning(self, "No Planets Selected",
+                                "Please select at least one planet for aspect calculations.")
             return
 
         # Get location and datetime
@@ -303,7 +441,13 @@ class KPAstrologyApp(QMainWindow):
         self.status_label.setText("Initializing...")
 
         # Start the generator thread
-        self.generator_thread = GeneratorThread(location, start_dt, selected_sheets)
+        self.generator_thread = GeneratorThread(
+            location,
+            start_dt,
+            selected_sheets,
+            selected_aspects,
+            selected_aspect_planets
+        )
         self.generator_thread.progress_signal.connect(self.update_progress)
         self.generator_thread.finished_signal.connect(self.export_to_excel)
         self.generator_thread.error_signal.connect(self.show_error)

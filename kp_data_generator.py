@@ -151,9 +151,6 @@ class KPDataGenerator:
         # Create a map for quick lookup
         planet_map = {}
         for planet in planets_data:
-            # Debug: print the planet Object to see what's coming from flatlib
-            # print(f"Planet from flatlib: {planet.Object}")
-
             # Map North Node to Rahu and South Node to Ketu explicitly
             display_name = None
             if planet.Object == "Rahu" or planet.Object == "North Node":
@@ -169,22 +166,14 @@ class KPDataGenerator:
         # Process planets in specific order
         for planet_name in planet_order:
             if planet_name not in planet_map:
-                # Debug: print missing planets
-                # print(f"Missing planet: {planet_name}")
                 continue
 
             planet = planet_map[planet_name]
             obj_name = planet.Object
 
             # Format position in degrees, minutes, seconds format
-            lon_deg = int(planet.LonDecDeg)
-            lon_min = int((planet.LonDecDeg - lon_deg) * 60)
-            lon_sec = int(((planet.LonDecDeg - lon_deg) * 60 - lon_min) * 60)
-
-            # Format as "14 Aqu 07' 51''"
-            sign_abbrev = planet.Rasi[:3]  # First 3 letters of sign
-            # position_str = f"{lon_deg} {sign_abbrev} {lon_min:02d}' {lon_sec:02d}''"
             position_str = self.format_position(planet)
+
             # Get retrograde status
             retrograde = "Y" if planet.isRetroGrade else "N"
 
@@ -327,6 +316,7 @@ class KPDataGenerator:
         }
 
         return hora_rulers.get(day_of_week, [])
+
     def get_planet_transitions(self, planet_name, start_dt, end_dt, check_interval_minutes=1):
         """
         Track transitions in a planet's position parameters over time.
@@ -356,6 +346,9 @@ class KPDataGenerator:
             # We need to check for both possible names
             def planet_match(p):
                 return p.Object == "South Node" or p.Object == "Ketu"
+        elif planet_name == "Ascendant":
+            def planet_match(p):
+                return p.Object == "Asc"
         else:
             internal_planet_name = self.reverse_planet_mapping.get(planet_name, planet_name)
 
@@ -433,6 +426,9 @@ class KPDataGenerator:
             elif planet_name == "Ketu":
                 planet_short_name = "Ketu"
                 relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
+            elif planet_name == "Ascendant":
+                planet_short_name = "Asc"
+                relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
             elif internal_planet_name in self.aspect_calculator.planet_short_names:
                 planet_short_name = self.aspect_calculator.planet_short_names[internal_planet_name]
                 relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
@@ -464,11 +460,7 @@ class KPDataGenerator:
                     display_planet_name += " (Ret.)"
 
                 # Format position
-                lon_deg = int(last_planet_data.LonDecDeg)
-                lon_min = int((last_planet_data.LonDecDeg - lon_deg) * 60)
-                lon_sec = int(((last_planet_data.LonDecDeg - lon_deg) * 60 - lon_min) * 60)
-                sign_abbrev = last_planet_data.Rasi[:3]
-                position_str = f"{lon_deg} {sign_abbrev} {lon_min:02d}' {lon_sec:02d}''"
+                position_str = self.format_position(last_planet_data)
 
                 # Format aspects/events - only show new aspects
                 aspects_str = "; ".join(new_aspects) if new_aspects else "None"
@@ -501,11 +493,7 @@ class KPDataGenerator:
                 display_planet_name += " (Ret.)"
 
             # Format position
-            lon_deg = int(last_planet_data.LonDecDeg)
-            lon_min = int((last_planet_data.LonDecDeg - lon_deg) * 60)
-            lon_sec = int(((last_planet_data.LonDecDeg - lon_deg) * 60 - lon_min) * 60)
-            sign_abbrev = last_planet_data.Rasi[:3]
-            position_str = f"{lon_deg} {sign_abbrev} {lon_min:02d}' {lon_sec:02d}''"
+            position_str = self.format_position(last_planet_data)
 
             # Get final aspects
             final_events = self.aspect_calculator.get_important_events(
@@ -513,15 +501,19 @@ class KPDataGenerator:
             )
 
             # Filter events relevant to this planet
+            planet_display_name = planet_name
             if planet_name == "Rahu":
                 planet_short_name = "Rahu"
-                relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
+                relevant_events = [e for e in final_events if planet_short_name in e and "entered" not in e]
             elif planet_name == "Ketu":
                 planet_short_name = "Ketu"
-                relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
+                relevant_events = [e for e in final_events if planet_short_name in e and "entered" not in e]
+            elif planet_name == "Ascendant":
+                planet_short_name = "Asc"
+                relevant_events = [e for e in final_events if planet_short_name in e and "entered" not in e]
             elif internal_planet_name in self.aspect_calculator.planet_short_names:
                 planet_short_name = self.aspect_calculator.planet_short_names[internal_planet_name]
-                relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
+                relevant_events = [e for e in final_events if planet_short_name in e and "entered" not in e]
             else:
                 relevant_events = []
 
