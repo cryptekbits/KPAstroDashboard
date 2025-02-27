@@ -54,6 +54,17 @@ class ExcelExporter:
                 for col_num, value in enumerate(df.columns.values):
                     worksheet.write(0, col_num, value, header_format)
 
+                # Get current time to highlight current row
+                current_time = datetime.now().strftime('%H:%M')
+
+                # Add conditional formatting to highlight the current time
+                highlight_format = workbook.add_format({
+                    'border': 1,
+                    'align': 'center',
+                    'valign': 'vcenter',
+                    'bg_color': '#FFFF00'  # Yellow highlighting
+                })
+
                 # Format the data rows
                 for row_num in range(1, len(df) + 1):
                     for col_num in range(len(df.columns)):
@@ -61,11 +72,12 @@ class ExcelExporter:
 
                 # Set column widths
                 worksheet.set_column('A:A', 12)  # Planet column
-                worksheet.set_column('B:B', 12)  # Position column
-                worksheet.set_column('C:E', 10)  # Other columns
-                worksheet.set_column('F:I', 15)  # Lord columns
-                worksheet.set_column('J:J', 20)  # KP Pointer column
-                worksheet.set_column('K:K', 40)  # Aspects column
+                worksheet.set_column('B:B', 18)  # Position column
+                worksheet.set_column('C:C', 10)  # Sign column
+                worksheet.set_column('D:D', 8)  # House column
+                worksheet.set_column('E:E', 14)  # Nakshatra column
+                worksheet.set_column('F:F', 25)  # KP Pointer column
+                worksheet.set_column('G:G', 40)  # Aspects column
 
             elif sheet_name == "Hora Timing":
                 # Format the header row
@@ -89,31 +101,9 @@ class ExcelExporter:
                     worksheet.write(0, col_num, value, header_format)
 
                 # Define color formats for different parameters
-                rashi_format = workbook.add_format({
+                # Using standard format without background coloring as requested
+                std_format = workbook.add_format({
                     'border': 1,
-                    'pattern': 1,
-                    'fg_color': '#FFD966',  # Light gold
-                    'align': 'center'
-                })
-
-                nakshatra_format = workbook.add_format({
-                    'border': 1,
-                    'pattern': 1,
-                    'fg_color': '#A9D08E',  # Light green
-                    'align': 'center'
-                })
-
-                lord_format = workbook.add_format({
-                    'border': 1,
-                    'pattern': 1,
-                    'fg_color': '#9BC2E6',  # Light blue
-                    'align': 'center'
-                })
-
-                sub_lord_format = workbook.add_format({
-                    'border': 1,
-                    'pattern': 1,
-                    'fg_color': '#F4B084',  # Light orange
                     'align': 'center'
                 })
 
@@ -135,36 +125,36 @@ class ExcelExporter:
                     'valign': 'top'
                 })
 
-                # Format the data rows with different colors for different parameters
+                # Get current time to highlight current row
+                current_time = datetime.now().strftime('%H:%M')
+
+                # Add conditional formatting to highlight the current time
+                highlight_format = workbook.add_format({
+                    'border': 1,
+                    'align': 'center',
+                    'bg_color': '#FFFF00'  # Yellow highlighting
+                })
+
+                # Format the data rows without background colors
                 for row_num in range(1, len(df) + 1):
-                    col_idx = 0
+                    # Check if this row corresponds to the current time
+                    is_current_time = False
+                    if 'Start Time' in df.columns and 'End Time' in df.columns:
+                        start_time = df.iloc[row_num - 1]['Start Time']
+                        end_time = df.iloc[row_num - 1]['End Time']
+                        if start_time <= current_time <= end_time:
+                            is_current_time = True
 
-                    # Time columns (Start Time, End Time)
-                    worksheet.write(row_num, col_idx, df.iloc[row_num - 1, col_idx], time_format)
-                    worksheet.write(row_num, col_idx + 1, df.iloc[row_num - 1, col_idx + 1], time_format)
+                    # Use chosen format based on whether it's current time
+                    row_format = highlight_format if is_current_time else std_format
 
-                    # Position column
-                    worksheet.write(row_num, col_idx + 2, df.iloc[row_num - 1, col_idx + 2], position_format)
-
-                    # Rashi column
-                    worksheet.write(row_num, col_idx + 3, df.iloc[row_num - 1, col_idx + 3], rashi_format)
-
-                    # Nakshatra column
-                    worksheet.write(row_num, col_idx + 4, df.iloc[row_num - 1, col_idx + 4], nakshatra_format)
-
-                    # Lord columns (Rashi Lord, Nakshatra Lord)
-                    worksheet.write(row_num, col_idx + 5, df.iloc[row_num - 1, col_idx + 5], lord_format)
-                    worksheet.write(row_num, col_idx + 6, df.iloc[row_num - 1, col_idx + 6], lord_format)
-
-                    # Sub Lord and Sub-Sub Lord columns
-                    worksheet.write(row_num, col_idx + 7, df.iloc[row_num - 1, col_idx + 7], sub_lord_format)
-                    if col_idx + 8 < len(df.columns):
-                        worksheet.write(row_num, col_idx + 8, df.iloc[row_num - 1, col_idx + 8], sub_lord_format)
-
-                    # Aspects column (if present)
-                    if 'Aspects' in df.columns:
-                        aspect_col = df.columns.get_loc('Aspects')
-                        worksheet.write(row_num, aspect_col, df.iloc[row_num - 1, aspect_col], aspects_format)
+                    # Apply format to all cells in the row
+                    for col_idx in range(len(df.columns)):
+                        # Use aspects format specifically for the aspects column
+                        if df.columns[col_idx] == 'Aspects':
+                            worksheet.write(row_num, col_idx, df.iloc[row_num - 1, col_idx], aspects_format)
+                        else:
+                            worksheet.write(row_num, col_idx, df.iloc[row_num - 1, col_idx], row_format)
 
                 # Set column widths
                 worksheet.set_column('A:B', 10)  # Time columns

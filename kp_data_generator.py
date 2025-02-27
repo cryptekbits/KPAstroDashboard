@@ -92,7 +92,7 @@ class KPDataGenerator:
 
     def get_planet_aspects(self, chart, planet_name):
         """
-        Get the aspects for a specific planet.
+        Get the major aspects for a specific planet.
 
         Parameters:
         -----------
@@ -104,17 +104,27 @@ class KPDataGenerator:
         Returns:
         --------
         list
-            A list of aspect strings
+            A list of aspect strings (only major aspects: 0, 60, 90, 120, 180)
         """
         # Get all aspects from the chart
         aspects_dict = self.create_chart_data(datetime.now(self.tz)).get_planetary_aspects(chart)
 
-        # Filter aspects for this planet
+        # Major aspects to track (degrees)
+        major_aspects = {
+            "Conjunction": 0,  # 0 degrees
+            "Sextile": 60,  # 60 degrees
+            "Square": 90,  # 90 degrees
+            "Trine": 120,  # 120 degrees
+            "Opposition": 180  # 180 degrees
+        }
+
+        # Filter aspects for this planet (only major aspects)
         planet_aspects = []
         for aspect in aspects_dict:
             if aspect["P1"] == planet_name or aspect["P2"] == planet_name:
-                other_planet = aspect["P2"] if aspect["P1"] == planet_name else aspect["P1"]
-                planet_aspects.append(f"{aspect['AspectType']} with {other_planet} ({aspect['AspectOrb']}°)")
+                if aspect["AspectType"] in major_aspects:
+                    other_planet = aspect["P2"] if aspect["P1"] == planet_name else aspect["P1"]
+                    planet_aspects.append(f"{aspect['AspectType']} with {other_planet} ({aspect['AspectOrb']}°)")
 
         return planet_aspects
 
@@ -142,29 +152,47 @@ class KPDataGenerator:
         # Create DataFrame
         planet_rows = []
 
+        # Specific planet order for display
+        planet_order = ["Ascendant", "Sun", "Moon", "Mercury", "Venus", "Mars",
+                        "Jupiter", "Saturn", "Rahu", "Ketu", "Uranus", "Neptune"]
+
+        # Create a map for quick lookup
+        planet_map = {}
         for planet in planets_data:
-            # Skip planets we don't want to include
-            if planet.Object not in self.planet_mapping.keys():
+            if planet.Object in self.planet_mapping:
+                planet_map[self.planet_mapping[planet.Object]] = planet
+
+        # Process planets in specific order
+        for planet_name in planet_order:
+            if planet_name not in planet_map:
                 continue
 
+            planet = planet_map[planet_name]
+            obj_name = planet.Object
+
+            # Format position in degrees, minutes, seconds format
+            lon_deg = int(planet.LonDecDeg)
+            lon_min = int((planet.LonDecDeg - lon_deg) * 60)
+            lon_sec = int(((planet.LonDecDeg - lon_deg) * 60 - lon_min) * 60)
+
+            # Format as "14 Aqu 07' 51''"
+            sign_abbrev = planet.Rasi[:3]  # First 3 letters of sign
+            position_str = f"{lon_deg} {sign_abbrev} {lon_min:02d}' {lon_sec:02d}''"
+
             # Get aspects for this planet
-            aspects = self.get_planet_aspects(chart, planet.Object)
+            aspects = self.get_planet_aspects(chart, obj_name)
             aspects_str = "; ".join(aspects) if aspects else "None"
 
-            # Calculate KP pointer
-            object_name = planet.Object if planet.Object != "Asc" else "Ascendant"
+            # Calculate KP pointer with SubSubLord
+            kp_pointer = f"{planet.RasiLord}-{planet.NakshatraLord}-{planet.SubLord}-{planet.SubSubLord}"
 
             planet_rows.append({
-                "Planet": self.planet_mapping.get(planet.Object, planet.Object),
-                "Position": f"{planet.LonDecDeg:.2f}°",
-                "Rashi": planet.Rasi,
-                "Nakshatra": planet.Nakshatra,
+                "Planet": planet_name,
+                "Position": position_str,
+                "Sign": planet.Rasi,
                 "House": planet.HouseNr if planet.HouseNr else "-",
-                "Rashi Lord": planet.RasiLord,
-                "Nakshatra Lord": planet.NakshatraLord,
-                "Sub Lord": planet.SubLord,
-                "Sub-Sub Lord": planet.SubSubLord,
-                "KP Pointer": f"{planet.RasiLord}-{planet.NakshatraLord}-{planet.SubLord}",
+                "Nakshatra": planet.Nakshatra,
+                "KP Pointer": kp_pointer,
                 "Aspects": aspects_str
             })
 
