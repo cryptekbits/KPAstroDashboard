@@ -1,20 +1,22 @@
 import sys
 import os
+import psutil
+import subprocess
 from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QLineEdit,
-                             QDateTimeEdit, QCheckBox, QGroupBox, QComboBox,
+                             QDateEdit, QTimeEdit, QCheckBox, QGroupBox, QComboBox,
                              QProgressBar, QMessageBox, QCompleter)
-from PyQt5.QtCore import Qt, QDateTime, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 
 from kp_data_generator import KPDataGenerator
 from excel_exporter import ExcelExporter
 
 
 class GeneratorThread(QThread):
-    progress_signal = pyqtSignal(int)
+    progress_signal = pyqtSignal(int, str)
     finished_signal = pyqtSignal(dict)
     error_signal = pyqtSignal(str)
 
@@ -57,12 +59,12 @@ class GeneratorThread(QThread):
 
             # Planet positions sheet
             if "Planet Positions" in self.sheets_to_generate:
-                self.progress_signal.emit(5)
+                self.progress_signal.emit(5, "Generating Planet Positions...")
                 results["Planet Positions"] = generator.get_planet_positions(self.start_datetime)
 
             # Hora timing sheet
             if "Hora Timing" in self.sheets_to_generate:
-                self.progress_signal.emit(10)
+                self.progress_signal.emit(10, "Generating Hora Timing...")
                 results["Hora Timing"] = generator.get_hora_timings(self.start_datetime, end_datetime)
 
             # Planets data
@@ -78,16 +80,16 @@ class GeneratorThread(QThread):
 
             for planet in planets:
                 if planet in self.sheets_to_generate:
-                    self.progress_signal.emit(current_progress)
+                    self.progress_signal.emit(current_progress, f"Generating {planet} data...")
                     results[planet] = generator.get_planet_transitions(
                         planet, self.start_datetime, end_datetime
                     )
                     current_progress += progress_per_planet
-                    self.progress_signal.emit(current_progress)
+                    self.progress_signal.emit(current_progress, f"Completed {planet} data")
 
-            self.progress_signal.emit(95)
+            self.progress_signal.emit(95, "Finalizing results...")
             self.finished_signal.emit(results)
-            self.progress_signal.emit(100)
+            self.progress_signal.emit(100, "Complete!")
 
         except Exception as e:
             self.error_signal.emit(f"Error during data generation: {str(e)}")
@@ -131,12 +133,23 @@ class KPAstrologyApp(QMainWindow):
         datetime_layout = QVBoxLayout()
         datetime_group.setLayout(datetime_layout)
 
-        self.datetime_picker = QDateTimeEdit()
-        self.datetime_picker.setCalendarPopup(True)
-        self.datetime_picker.setDateTime(QDateTime.currentDateTime().addSecs(9 * 3600))  # Default 9:00 AM today
+        # Separate date and time fields
+        date_layout = QHBoxLayout()
+        self.date_picker = QDateEdit()
+        self.date_picker.setCalendarPopup(True)
+        self.date_picker.setDate(QDate.currentDate())
+        date_layout.addWidget(QLabel("Date:"))
+        date_layout.addWidget(self.date_picker)
 
-        datetime_layout.addWidget(QLabel("Start Date and Time:"))
-        datetime_layout.addWidget(self.datetime_picker)
+        time_layout = QHBoxLayout()
+        self.time_picker = QTimeEdit()
+        self.time_picker.setTime(QTime(9, 0))  # Default to 9:00 AM
+        self.time_picker.setDisplayFormat("hh:mm AP")
+        time_layout.addWidget(QLabel("Time:"))
+        time_layout.addWidget(self.time_picker)
+
+        datetime_layout.addLayout(date_layout)
+        datetime_layout.addLayout(time_layout)
 
         main_layout.addWidget(datetime_group)
 
@@ -174,11 +187,26 @@ class KPAstrologyApp(QMainWindow):
 
         main_layout.addLayout(select_layout)
 
-        # Progress bar
+        # Progress bar and status label
+        progress_group = QGroupBox("Progress")
+        progress_layout = QVBoxLayout()
+        progress_group.setLayout(progress_layout)
+
+        # Add status label above progress bar
+        self.status_label = QLabel("Ready")
+        progress_layout.addWidget(self.status_label)
+
+        # Progress bar with percentage display
+        progress_bar_layout = QHBoxLayout()
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        main_layout.addWidget(self.progress_bar)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%p%")
+        progress_bar_layout.addWidget(self.progress_bar)
+
+        progress_layout.addLayout(progress_bar_layout)
+        main_layout.addWidget(progress_group)
 
         # Generate button
         self.generate_btn = QPushButton("Generate Excel")
@@ -193,6 +221,34 @@ class KPAstrologyApp(QMainWindow):
         for checkbox in self.sheet_checkboxes.values():
             checkbox.setChecked(False)
 
+    def is_file_open(self, filepath):
+        """Check if a file is currently open by another process"""
+        if not os.path.exists(filepath):
+            return False
+
+        for proc in psutil.process_iter():
+            try:
+                for item in proc.open_files():
+                    if filepath == item.path:
+                        return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        return False
+
+    def open_excel_file(self, filepath):
+        """Open the Excel file using the default application"""
+        try:
+            if sys.platform == 'win32':
+                os.startfile(filepath)
+            elif sys.platform == 'darwin':  # macOS
+                subprocess.call(['open', filepath])
+            else:  # Linux
+                subprocess.call(['xdg-open', filepath])
+            return True
+        except Exception as e:
+            print(f"Error opening Excel file: {str(e)}")
+            return False
+
     def generate_data(self):
         # Get selected sheets
         selected_sheets = [name for name, checkbox in self.sheet_checkboxes.items()
@@ -205,21 +261,46 @@ class KPAstrologyApp(QMainWindow):
 
         # Get location and datetime
         location = self.location_combo.currentText()
-        start_qdt = self.datetime_picker.dateTime()
 
-        # Convert QDateTime to Python datetime with timezone
+        # Get date and time separately and combine
+        qdate = self.date_picker.date()
+        qtime = self.time_picker.time()
+
+        # Convert QDate and QTime to Python datetime
         start_dt = datetime(
-            start_qdt.date().year(),
-            start_qdt.date().month(),
-            start_qdt.date().day(),
-            start_qdt.time().hour(),
-            start_qdt.time().minute(),
-            start_qdt.time().second()
+            qdate.year(),
+            qdate.month(),
+            qdate.day(),
+            qtime.hour(),
+            qtime.minute(),
+            qtime.second()
         )
+
+        # Check if excel file is already open
+        excel_file = "KP Panchang.xlsx"
+        if self.is_file_open(excel_file):
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Warning)
+            msgBox.setText(f"The file '{excel_file}' is currently open.")
+            msgBox.setInformativeText("Please close it before generating a new file.")
+            msgBox.setWindowTitle("File Open")
+            msgBox.setStandardButtons(QMessageBox.Ok)
+            msgBox.exec_()
+            return
+
+        # Delete existing file if it exists
+        if os.path.exists(excel_file):
+            try:
+                os.remove(excel_file)
+            except Exception as e:
+                QMessageBox.warning(self, "File Error",
+                                    f"Could not remove existing file: {str(e)}")
+                return
 
         # Disable UI during generation
         self.generate_btn.setEnabled(False)
         self.progress_bar.setValue(0)
+        self.status_label.setText("Initializing...")
 
         # Start the generator thread
         self.generator_thread = GeneratorThread(location, start_dt, selected_sheets)
@@ -228,24 +309,29 @@ class KPAstrologyApp(QMainWindow):
         self.generator_thread.error_signal.connect(self.show_error)
         self.generator_thread.start()
 
-    def update_progress(self, value):
+    def update_progress(self, value, status):
         self.progress_bar.setValue(value)
+        self.status_label.setText(status)
 
     def export_to_excel(self, results):
         try:
-            location = self.location_combo.currentText()
-            date_str = self.datetime_picker.dateTime().toString('yyyy-MM-dd')
+            # Create filename
+            filename = "KP Panchang.xlsx"
 
-            # Create filename with location and date
-            filename = f"KP_Nakshatras_{location}_{date_str}.xlsx"
+            self.status_label.setText("Exporting to Excel...")
 
             # Export to Excel
             exporter = ExcelExporter()
             exporter.export_to_excel(results, filename)
 
+            self.status_label.setText("Export complete!")
+
             # Show success message
             QMessageBox.information(self, "Export Complete",
                                     f"Data has been exported to {filename}")
+
+            # Automatically open the Excel file
+            self.open_excel_file(filename)
 
         except Exception as e:
             QMessageBox.critical(self, "Export Error",
@@ -253,10 +339,12 @@ class KPAstrologyApp(QMainWindow):
         finally:
             # Re-enable UI
             self.generate_btn.setEnabled(True)
+            self.status_label.setText("Ready")
 
     def show_error(self, error_message):
         QMessageBox.critical(self, "Error", error_message)
         self.generate_btn.setEnabled(True)
+        self.status_label.setText("Error occurred")
 
 
 if __name__ == "__main__":

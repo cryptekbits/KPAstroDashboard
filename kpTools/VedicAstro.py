@@ -313,28 +313,49 @@ class VedicHoroscopeData:
                                         "SignLonDMS" : lon_dms, "SignLonDecDeg": sign_lon_dd}
         return final_dict
 
-
+    # Modified get_planet_in_house function
     def get_planet_in_house(self, houses_chart: Chart, planets_chart: Chart):
-        """Determine which house each planet is in given a `flatlib.Chart` object"""
+        """Determine which house each planet is in given a flatlib.Chart object"""
         planet_in_house = {}
 
-        # Get the list of cusps (the boundary between two houses) along with their house numbers
-        cusps = sorted([(house.lon, int(house.id.replace('House', ''))) for house in houses_chart.houses])
-        # Add the first cusp (plus 360 degrees) as the end of the last house
-        cusps.append((cusps[0][0] + 360, cusps[0][1])) 
-        # print("Cusps ADJ:",cusps)
+        # Get house cusps with their house numbers
+        cusps = [(house.lon, int(house.id.replace('House', ''))) for house in houses_chart.houses]
+
+        # Sort by longitude
+        cusps = sorted(cusps, key=lambda x: x[0])
+
+        # Add the first cusp plus 360° as the end of the zodiac
+        cusps.append((cusps[0][0] + 360, cusps[0][1]))
 
         for planet in planets_chart.objects:
             planet_name = clean_select_objects_split_str(str(planet))[0]
             planet_lon = planet.lon
-            for i in range(12):
-                if cusps[i][0] <= planet_lon < cusps[i+1][0]:
+
+            # Find the house
+            house_found = False
+            for i in range(len(cusps) - 1):
+                if cusps[i][0] <= planet_lon < cusps[i + 1][0]:
                     planet_in_house[planet_name] = cusps[i][1]
+                    house_found = True
                     break
-                    ## Check if planet is overlapping into the last cusp
-                elif cusps[i][0] <= planet_lon + 360 < cusps[i+1][0]:
-                    planet_in_house[planet_name] = cusps[i][1]
-                    break
+
+            # Edge case: If we're very close to the 360° boundary
+            if not house_found:
+                # Try with normalized longitude
+                norm_lon = planet_lon % 360
+                for i in range(len(cusps) - 1):
+                    if cusps[i][0] <= norm_lon < cusps[i + 1][0]:
+                        planet_in_house[planet_name] = cusps[i][1]
+                        house_found = True
+                        break
+
+            # Validate house number (should be 1-12)
+            if planet_name in planet_in_house:
+                house_nr = planet_in_house[planet_name]
+                if house_nr < 1 or house_nr > 12:
+                    # Fix invalid house number
+                    print(f"Warning: Invalid house {house_nr} calculated for {planet_name}. Correcting.")
+                    planet_in_house[planet_name] = ((house_nr - 1) % 12) + 1
 
         return planet_in_house
     
