@@ -52,7 +52,7 @@ class NeutralYogas(BaseYoga):
         # Only use the main planets for this yoga
         main_planets = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]
 
-        for planet in planets_data:
+        for planet in planets_
             if planet.Object in main_planets and planet.HouseNr:
                 houses_occupied[planet.HouseNr].append(planet.Object)
 

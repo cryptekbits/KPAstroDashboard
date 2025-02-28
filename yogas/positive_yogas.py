@@ -9,7 +9,7 @@ class PositiveYogas(BaseYoga):
         sun_sign = None
         mercury_sign = None
 
-        for planet in planets_data:
+        for planet in planets_
             if planet.Object == "Sun":
                 sun_sign = planet.Rasi
             elif planet.Object == "Mercury":
@@ -68,7 +68,7 @@ class PositiveYogas(BaseYoga):
         }
 
         # Check if any planet is in debilitation and if its lord is well-placed
-        for planet in planets_data:
+        for planet in planets_
             name = planet.Object
             if name in debilitation and planet.Rasi == debilitation[name]:
                 # Planet is debilitated
@@ -164,7 +164,7 @@ class PositiveYogas(BaseYoga):
             active_yogas.append("Dhana Yoga")
 
         # 3. Jupiter in 2nd or 5th or 11th house
-        for planet in planets_data:
+        for planet in planets_
             if planet.Object == "Jupiter" and planet.HouseNr in [2, 5, 11]:
                 active_yogas.append("Guru-Mangala Yoga")
                 break

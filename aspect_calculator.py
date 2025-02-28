@@ -130,7 +130,7 @@ class AspectCalculator:
             return []
 
         changes = []
-        for planet in current_
+        for planet in current_data:
             # Get the display name for this planet
             display_name = planet.Object
             if display_name == "North Node":
@@ -176,7 +176,7 @@ class AspectCalculator:
                 continue
 
             # Look for the same planet in previous data
-            for prev_planet in previous_
+            for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
                     # Check if sign changed
                     if planet.Rasi != prev_planet.Rasi:
@@ -187,7 +187,7 @@ class AspectCalculator:
 
     def check_nakshatra_changes(self, previous_data, current_data):
         """Check if any planet changed nakshatras"""
-        if not previous_
+        if not previous_data:
             return []
 
         changes = []

@@ -62,12 +62,12 @@ class NegativeYogas(BaseYoga):
         or its own sign and no aspects
         """
         moon_data = None
-        for planet in planets_data:
+        for planet in planets_
             if planet.Object == "Moon":
                 moon_data = planet
                 break
 
-        if not moon_
+        if not moon_data:
             return False
 
         # Find Moon's house
