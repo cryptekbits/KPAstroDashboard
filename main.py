@@ -6,6 +6,7 @@ A high-precision Krishnamurti Paddhati (KP) astrology calculator with convenient
 import sys
 import os
 import traceback
+import logging
 from datetime import datetime
 from PyQt5.QtWidgets import QApplication, QSplashScreen, QMessageBox
 from PyQt5.QtCore import Qt, QTimer
@@ -36,7 +37,6 @@ def setup_environment():
     os.makedirs(data_dir, exist_ok=True)
 
     # Set up logging
-    import logging
     log_dir = os.path.join(root_dir, 'logs')
     os.makedirs(log_dir, exist_ok=True)
 
@@ -78,6 +78,8 @@ def main():
     # Set up application environment
     root_dir = setup_environment()
 
+    logging.info("Application starting")
+
     # Set up exception handling
     sys.excepthook = handle_exception
 
@@ -85,11 +87,15 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("KP Astrology Dashboard")
     app.setApplicationVersion("1.0.0")
+    logging.info(f"Qt Application created: {app.applicationName()} {app.applicationVersion()}")
 
     # Set app icon
     icon_path = os.path.join(root_dir, 'resources', 'icon.png')
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
+        logging.debug(f"Set application icon from {icon_path}")
+    else:
+        logging.warning(f"Icon file not found: {icon_path}")
 
     # Show splash screen
     splash_path = os.path.join(root_dir, 'resources', 'splash.png')
@@ -98,31 +104,38 @@ def main():
         splash = QSplashScreen(splash_pixmap, Qt.WindowStaysOnTopHint)
         splash.show()
         app.processEvents()
+        logging.debug("Splash screen displayed")
     else:
         splash = None
+        logging.warning(f"Splash image not found: {splash_path}")
 
     # Create and display main window
     try:
         # Load config
-        config = app_config.load_config()
+        config = app_config.get_config()
+        logging.info("Configuration loaded")
 
         # Create main window
         window = MainWindow()
+        logging.info("Main window created")
 
         # Close splash after a delay
         if splash:
             QTimer.singleShot(1500, splash.close)
+            logging.debug("Splash screen set to close after delay")
 
         # Show main window
         window.show()
+        logging.info("Main window displayed")
 
         # Start the application event loop
+        logging.info("Starting application event loop")
         sys.exit(app.exec_())
 
     except Exception as e:
         if splash:
             splash.close()
-        logging.error(f"Error starting application: {str(e)}")
+        logging.error(f"Error starting application: {str(e)}", exc_info=True)
         QMessageBox.critical(None, "Startup Error",
                              f"Error starting the application:\n\n{str(e)}")
         sys.exit(1)

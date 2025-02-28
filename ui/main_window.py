@@ -223,7 +223,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         """Initialize the main window."""
         super().__init__()
-        self.init_ui()
 
         # Default settings
         self.settings = {
@@ -238,6 +237,8 @@ class MainWindow(QMainWindow):
             "yoga_days_future": 30,
             "calculation_interval": 10,  # minutes
         }
+
+        self.init_ui()
 
         # History of calculation results
         self.results_history = {}
