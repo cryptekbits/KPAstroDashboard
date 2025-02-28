@@ -164,7 +164,7 @@ class PositiveYogas(BaseYoga):
             active_yogas.append("Dhana Yoga")
 
         # 3. Jupiter in 2nd or 5th or 11th house
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Jupiter" and planet.HouseNr in [2, 5, 11]:
                 active_yogas.append("Guru-Mangala Yoga")
                 break

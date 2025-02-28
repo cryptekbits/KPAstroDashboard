@@ -72,7 +72,7 @@ class BaseYoga:
         planet1_sign = None
         planet2_sign = None
 
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == planet1_name:
                 planet1_sign = planet.Rasi
             elif planet.Object == planet2_name:

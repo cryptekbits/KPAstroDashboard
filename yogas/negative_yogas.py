@@ -9,7 +9,7 @@ class NegativeYogas(BaseYoga):
         moon_house = None
         malefic_houses = []
 
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Moon":
                 moon_house = planet.HouseNr
             elif planet.Object in ["Sun", "Mars", "Saturn", "Rahu", "Ketu", "North Node", "South Node"]:
@@ -24,7 +24,7 @@ class NegativeYogas(BaseYoga):
         
     def check_angarak_yoga(self, chart, planets_data):
         """Check for Angarak Yoga - Mars in 1st, 4th, 7th, 8th, or 12th house"""
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Mars" and planet.HouseNr in [1, 4, 7, 8, 12]:
                 return True
         return False
@@ -62,12 +62,12 @@ class NegativeYogas(BaseYoga):
         or its own sign and no aspects
         """
         moon_data = None
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Moon":
                 moon_data = planet
                 break
 
-        if not moon_data:
+        if not moon_
             return False
 
         # Find Moon's house

@@ -176,7 +176,7 @@ class AspectCalculator:
                 continue
 
             # Look for the same planet in previous data
-            for prev_planet in previous_data:
+            for prev_planet in previous_
                 if planet.Object == prev_planet.Object:
                     # Check if sign changed
                     if planet.Rasi != prev_planet.Rasi:
