@@ -11,7 +11,7 @@ from collections import namedtuple
 # Import the core VedicHoroscopeData class
 # In the refactored structure, this would be from core.vedic_astro import VedicHoroscopeData
 # For now, assuming we're using the existing class from kpTools
-from kpTools.VedicAstro import VedicHoroscopeData
+from core.vedic_astro import VedicChart
 
 
 class PositionCalculator:
@@ -63,7 +63,7 @@ class PositionCalculator:
 
         print(f"PositionCalculator initialized for {latitude}, {longitude} ({timezone_str}) using {ayanamsa} ayanamsa")
 
-    def create_chart_data(self, dt: datetime) -> VedicHoroscopeData:
+    def create_chart_data(self, dt: datetime) -> VedicChart:
         """
         Create VedicHoroscopeData for the given datetime.
 
@@ -81,7 +81,7 @@ class PositionCalculator:
         dt = dt.astimezone(self.timezone)
 
         # Create the chart data
-        chart_data = VedicHoroscopeData(
+        chart_data = VedicChart(
             year=dt.year,
             month=dt.month,
             day=dt.day,
