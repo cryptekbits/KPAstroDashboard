@@ -139,3 +139,22 @@ class KPDataGenerator:
             DataFrame with transition data
         """
         return self.transit_calculator.get_planet_transitions(planet_name, start_dt, end_dt, check_interval_minutes)
+        
+    def calculate_yogas(self, chart, planets_data):
+        """
+        Calculate all yogas (auspicious and inauspicious planetary combinations) for the given chart.
+        
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : pandas.DataFrame
+            DataFrame with planet positions
+            
+        Returns:
+        --------
+        list
+            List of yoga dictionaries containing yoga information
+        """
+        # Use the aspect calculator to calculate yogas
+        return self.aspect_calculator.calculate_yogas(chart, planets_data)
