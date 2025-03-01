@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QLineEdit,
                              QDateEdit, QTimeEdit, QCheckBox, QGroupBox, QComboBox,
                              QProgressBar, QMessageBox, QCompleter, QScrollArea,
-                             QGridLayout)
+                             QGridLayout, QSpinBox)
 from PyQt5.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 
 from kp_data_generator import KPDataGenerator
@@ -21,13 +21,14 @@ class GeneratorThread(QThread):
     finished_signal = pyqtSignal(dict)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, location, start_datetime, sheets_to_generate, selected_aspects, aspect_planets):
+    def __init__(self, location, start_datetime, sheets_to_generate, selected_aspects, aspect_planets, yoga_settings=None):
         super().__init__()
         self.location = location
         self.start_datetime = start_datetime
         self.sheets_to_generate = sheets_to_generate
         self.selected_aspects = selected_aspects
         self.aspect_planets = aspect_planets
+        self.yoga_settings = yoga_settings  # New parameter for yoga calculations
 
     def run(self):
         try:
@@ -42,7 +43,7 @@ class GeneratorThread(QThread):
             }
 
             location_data = locations.get(self.location)
-            if not location_data:
+            if not location_
                 self.error_signal.emit(f"Location {self.location} not found!")
                 return
 
@@ -81,9 +82,13 @@ class GeneratorThread(QThread):
                 "Uranus", "Neptune"
             ]
 
-            total_planets = sum(1 for p in planets if p in self.sheets_to_generate)
+            # Calculate progress distribution
+            total_items = sum(1 for p in planets if p in self.sheets_to_generate)
+            if "Yogas" in self.sheets_to_generate:
+                total_items += 1  # Add one more item for yogas
+            
             current_progress = 15
-            progress_per_planet = 70 / (total_planets or 1)  # Avoid division by zero
+            progress_per_item = 70 / (total_items or 1)  # Avoid division by zero
 
             for planet in planets:
                 if planet in self.sheets_to_generate:
@@ -91,8 +96,55 @@ class GeneratorThread(QThread):
                     results[planet] = generator.get_planet_transitions(
                         planet, self.start_datetime, end_datetime
                     )
-                    current_progress += progress_per_planet
+                    current_progress += progress_per_item
                     self.progress_signal.emit(current_progress, f"Completed {planet} data")
+
+            # Calculate Yogas if included
+            if "Yogas" in self.sheets_to_generate and self.yoga_settings:
+                self.progress_signal.emit(current_progress, "Calculating Yogas...")
+                
+                yoga_start_date = self.yoga_settings["start_date"]
+                yoga_end_date = self.yoga_settings["end_date"]
+                
+                # Initialize a list to store yoga data
+                yoga_data = []
+                
+                # Calculate the total days for progress indication
+                total_days = (yoga_end_date - yoga_start_date).days + 1
+                days_processed = 0
+                
+                # Loop through each day in the range
+                current_date = yoga_start_date
+                while current_date <= yoga_end_date:
+                    self.progress_signal.emit(
+                        current_progress + (progress_per_item * days_processed / total_days),
+                        f"Calculating Yogas for {current_date.strftime('%Y-%m-%d')}..."
+                    )
+                    
+                    # Get chart data for the current date
+                    chart_data = generator.create_chart_data(current_date)
+                    planets_data = generator.get_planet_positions(current_date)
+                    
+                    # Calculate yogas for this date
+                    daily_yogas = generator.calculate_yogas(chart_data, planets_data)
+                    
+                    # Add each yoga to the list with date and time
+                    for yoga in daily_yogas:
+                        yoga_entry = {
+                            "Date": current_date.strftime("%Y-%m-%d"),
+                            "Time": current_date.strftime("%H:%M"),
+                            "Yoga Name": yoga["name"],
+                            "Planets": yoga["planets_info"]
+                        }
+                        yoga_data.append(yoga_entry)
+                    
+                    # Move to next day
+                    current_date += timedelta(days=1)
+                    days_processed += 1
+                
+                # Store the yoga data in results
+                results["Yogas"] = yoga_data
+                current_progress += progress_per_item
 
             self.progress_signal.emit(95, "Finalizing results...")
             self.finished_signal.emit(results)
@@ -166,6 +218,34 @@ class KPAstrologyApp(QMainWindow):
 
         main_layout.addWidget(datetime_group)
 
+        # Yoga date range selection
+        yoga_group = QGroupBox("Yoga Calculations")
+        yoga_layout = QVBoxLayout()
+        yoga_group.setLayout(yoga_layout)
+
+        # Add explanation label
+        yoga_layout.addWidget(QLabel("Date range for calculating yogas:"))
+
+        # Days before current date
+        yoga_before_layout = QHBoxLayout()
+        yoga_before_layout.addWidget(QLabel("Days before:"))
+        self.yoga_days_before = QSpinBox()
+        self.yoga_days_before.setRange(0, 365)
+        self.yoga_days_before.setValue(7)  # Default value: 7 days before
+        yoga_before_layout.addWidget(self.yoga_days_before)
+        yoga_layout.addLayout(yoga_before_layout)
+
+        # Days after current date
+        yoga_after_layout = QHBoxLayout()
+        yoga_after_layout.addWidget(QLabel("Days after:"))
+        self.yoga_days_after = QSpinBox()
+        self.yoga_days_after.setRange(0, 365)
+        self.yoga_days_after.setValue(30)  # Default value: 30 days after
+        yoga_after_layout.addWidget(self.yoga_days_after)
+        yoga_layout.addLayout(yoga_after_layout)
+
+        main_layout.addWidget(yoga_group)
+
         # Sheets selection
         sheets_group = QGroupBox("Sheets to Generate")
         sheets_layout = QVBoxLayout()
@@ -175,7 +255,7 @@ class KPAstrologyApp(QMainWindow):
         self.sheet_names = [
             "Planet Positions", "Hora Timing", "Moon", "Ascendant",
             "Sun", "Mercury", "Venus", "Mars", "Jupiter",
-            "Saturn", "Rahu", "Ketu", "Uranus", "Neptune"
+            "Saturn", "Rahu", "Ketu", "Uranus", "Neptune", "Yogas"  # Added Yogas
         ]
 
         # Create a grid layout for checkboxes (2 columns)
@@ -435,6 +515,21 @@ class KPAstrologyApp(QMainWindow):
                                     f"Could not remove existing file: {str(e)}")
                 return
 
+        # Prepare yoga settings if Yogas sheet is selected
+        yoga_settings = None
+        if "Yogas" in selected_sheets:
+            # Calculate the start and end dates for yoga calculations
+            days_before = self.yoga_days_before.value()
+            days_after = self.yoga_days_after.value()
+            
+            yoga_start_date = start_dt - timedelta(days=days_before)
+            yoga_end_date = start_dt + timedelta(days=days_after)
+            
+            yoga_settings = {
+                "start_date": yoga_start_date,
+                "end_date": yoga_end_date
+            }
+
         # Disable UI during generation
         self.generate_btn.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -446,7 +541,8 @@ class KPAstrologyApp(QMainWindow):
             start_dt,
             selected_sheets,
             selected_aspects,
-            selected_aspect_planets
+            selected_aspect_planets,
+            yoga_settings
         )
         self.generator_thread.progress_signal.connect(self.update_progress)
         self.generator_thread.finished_signal.connect(self.export_to_excel)
