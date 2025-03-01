@@ -1,16 +1,26 @@
 import pandas as pd
-import numpy as np
 from datetime import datetime
 import os
 
 
 class ExcelExporter:
+    """
+    Class for exporting data to Excel with formatting.
+    Handles creating sheets for planetary positions, transits, and yogas.
+    """
+
     def __init__(self):
         """Initialize the Excel exporter."""
-        pass
+        # Define mapping for yoga nature to color codes
+        self.yoga_nature_colors = {
+            "Excellent": "#D8E4BC",  # Light green
+            "Good": "#E2EFDA",  # Pale green
+            "Neutral": "#EDEDED",  # Light gray
+            "Bad": "#F8CBAD",  # Light red/orange
+            "Worst": "#E6B8B7"  # Darker red
+        }
 
-    @staticmethod
-    def export_to_excel(data_dict, filename):
+    def export_to_excel(self, data_dict, filename):
         """
         Export the provided data to an Excel file with multiple sheets.
 
@@ -21,236 +31,385 @@ class ExcelExporter:
         filename : str
             Name of the Excel file to create
         """
+        print(f"Exporting data to {filename}...")
+
         # Create a Pandas Excel writer using XlsxWriter as the engine
         writer = pd.ExcelWriter(filename, engine='xlsxwriter')
+        workbook = writer.book
+
+        # Create common formats
+        header_format = workbook.add_format({
+            'bold': True,
+            'text_wrap': True,
+            'valign': 'top',
+            'fg_color': '#D7E4BC',
+            'border': 1
+        })
+
+        # Standard cell format
+        cell_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+
+        # Create format for each yoga nature
+        yoga_formats = {}
+        for nature, color in self.yoga_nature_colors.items():
+            yoga_formats[nature] = workbook.add_format({
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'bg_color': color
+            })
+
+        # Initialize current time for highlighting in time-based sheets
+        current_time = datetime.now().strftime('%H:%M')
 
         # Iterate through each data frame and save to a different sheet
         for sheet_name, df in data_dict.items():
-            # Write the dataframe to the sheet
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            print(f"Processing sheet: {sheet_name}")
 
-            # Get the xlsxwriter workbook and worksheet objects
-            workbook = writer.book
-            worksheet = writer.sheets[sheet_name]
-
-            # Create a format for headers
-            header_format = workbook.add_format({
-                'bold': True,
-                'text_wrap': True,
-                'valign': 'top',
-                'fg_color': '#D7E4BC',
-                'border': 1
-            })
-
-            # Create a format for the planet positions table
-            planet_format = workbook.add_format({
-                'border': 1,
-                'align': 'center',
-                'valign': 'vcenter'
-            })
-
-            # Apply conditional formatting for certain sheets
-            if sheet_name == "Planet Positions":
-                # Format the header row
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-
-                # Get current time to highlight current row
-                current_time = datetime.now().strftime('%H:%M')
-
-                # Add conditional formatting to highlight the current time
-                highlight_format = workbook.add_format({
-                    'border': 1,
-                    'align': 'center',
-                    'valign': 'vcenter',
-                    'bg_color': '#FFFF00'  # Yellow highlighting
-                })
-
-                # Format the data rows
-                for row_num in range(1, len(df) + 1):
-                    for col_num in range(len(df.columns)):
-                        worksheet.write(row_num, col_num, df.iloc[row_num - 1, col_num], planet_format)
-
-                # Set column widths
-                worksheet.set_column('A:A', 12)  # Planet column
-                worksheet.set_column('B:B', 18)  # Position column
-                worksheet.set_column('C:C', 10)  # Sign column
-                worksheet.set_column('D:D', 8)  # House column
-                worksheet.set_column('E:E', 14)  # Nakshatra column
-                worksheet.set_column('F:F', 25)  # KP Pointer column
-                worksheet.set_column('G:G', 40)  # Aspects column
-
+            # Special handling for Yogas sheet
+            if sheet_name == "Yogas":
+                self._create_yoga_sheet(df, writer, workbook, header_format, yoga_formats)
+            elif sheet_name == "Planet Positions":
+                self._create_planet_positions_sheet(df, writer, workbook, header_format, cell_format, current_time)
             elif sheet_name == "Hora Timing":
-                # Format the header row
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-
-                # Format the data rows
-                for row_num in range(1, len(df) + 1):
-                    for col_num in range(len(df.columns)):
-                        worksheet.write(row_num, col_num, df.iloc[row_num - 1, col_num], planet_format)
-
-                # Set column widths
-                worksheet.set_column('A:B', 12)  # Time columns
-                worksheet.set_column('C:C', 10)  # Planet column
-
+                self._create_hora_timing_sheet(df, writer, workbook, header_format, cell_format, current_time)
             else:
-                # This is a planet transition sheet
-
-                # Format the header row
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-
-                # Define color formats for different parameters
-                # Using standard format without background coloring as requested
-                std_format = workbook.add_format({
-                    'border': 1,
-                    'align': 'center'
-                })
-
-                position_format = workbook.add_format({
-                    'border': 1,
-                    'align': 'center'
-                })
-
-                time_format = workbook.add_format({
-                    'border': 1,
-                    'align': 'center',
-                    'fg_color': '#E2EFDA'  # Light green
-                })
-
-                aspects_format = workbook.add_format({
-                    'border': 1,
-                    'text_wrap': True,
-                    'align': 'left',
-                    'valign': 'top'
-                })
-
-                # Get current time to highlight current row
-                current_time = datetime.now().strftime('%H:%M')
-
-                # Add conditional formatting to highlight the current time
-                highlight_format = workbook.add_format({
-                    'border': 1,
-                    'align': 'center',
-                    'bg_color': '#FFFF00'  # Yellow highlighting
-                })
-
-                # Format the data rows without background colors
-                for row_num in range(1, len(df) + 1):
-                    # Check if this row corresponds to the current time
-                    is_current_time = False
-                    if 'Start Time' in df.columns and 'End Time' in df.columns:
-                        start_time = df.iloc[row_num - 1]['Start Time']
-                        end_time = df.iloc[row_num - 1]['End Time']
-                        if start_time <= current_time <= end_time:
-                            is_current_time = True
-
-                    # Use chosen format based on whether it's current time
-                    row_format = highlight_format if is_current_time else std_format
-
-                    # Apply format to all cells in the row
-                    for col_idx in range(len(df.columns)):
-                        # Use aspects format specifically for the aspects column
-                        if df.columns[col_idx] == 'Aspects':
-                            aspect_value = df.iloc[row_num - 1, col_idx]
-
-                            # Skip if no aspects or "None"
-                            if not aspect_value or aspect_value == "None":
-                                worksheet.write(row_num, col_idx, aspect_value, aspects_format)
-                                continue
-
-                            # Check if the cell contains yoga information
-                            contains_positive_yoga = False
-                            contains_negative_yoga = False
-
-                            # Define which yogas are negative
-                            negative_yogas = [
-                                "Vish Yoga", "Angarak Yoga", "Guru Chandala Yoga",
-                                "Graha Yuddha", "Kemadruma Yoga", "Kala Sarpa Yoga"
-                            ]
-
-                            # Check each yoga in the aspects cell
-                            if isinstance(aspect_value, str) and "Yoga" in aspect_value:
-                                for yoga in aspect_value.split("; "):
-                                    if "Yoga" in yoga:
-                                        # Check if it matches any negative yoga
-                                        is_negative = any(neg_yoga in yoga for neg_yoga in negative_yogas)
-                                        if is_negative:
-                                            contains_negative_yoga = True
-                                        else:
-                                            contains_positive_yoga = True
-
-                            # Apply formatting based on yoga type
-                            if contains_positive_yoga and not contains_negative_yoga:
-                                # Positive yoga - green background
-                                positive_format = workbook.add_format({
-                                    'border': 1,
-                                    'align': 'left',
-                                    'text_wrap': True,
-                                    'valign': 'top',
-                                    'bg_color': '#E2EFDA'  # Light green
-                                })
-                                worksheet.write(row_num, col_idx, aspect_value, positive_format)
-
-                            elif contains_negative_yoga and not contains_positive_yoga:
-                                # Negative yoga - red background
-                                negative_format = workbook.add_format({
-                                    'border': 1,
-                                    'align': 'left',
-                                    'text_wrap': True,
-                                    'valign': 'top',
-                                    'bg_color': '#FFCCCC'  # Light red
-                                })
-                                worksheet.write(row_num, col_idx, aspect_value, negative_format)
-
-                            elif contains_positive_yoga and contains_negative_yoga:
-                                # Mixed yogas - yellow background
-                                mixed_format = workbook.add_format({
-                                    'border': 1,
-                                    'align': 'left',
-                                    'text_wrap': True,
-                                    'valign': 'top',
-                                    'bg_color': '#FFF2CC'  # Light yellow
-                                })
-                                worksheet.write(row_num, col_idx, aspect_value, mixed_format)
-
-                            else:
-                                # No yogas - use the default aspect format
-                                worksheet.write(row_num, col_idx, aspect_value, aspects_format)
-                        else:
-                            worksheet.write(row_num, col_idx, df.iloc[row_num - 1, col_idx], row_format)
-
-                # Set column widths
-                worksheet.set_column('A:B', 10)  # Time columns
-                worksheet.set_column('C:C', 12)  # Position column
-                worksheet.set_column('D:D', 12)  # Rashi column
-                worksheet.set_column('E:E', 15)  # Nakshatra column
-                worksheet.set_column('F:I', 15)  # Lord columns
-                worksheet.set_column('J:J', 40)  # Aspects column (if present)
-
-            # Add auto filter
-            if len(df) > 0:
-                worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
-
-            # Freeze the header row
-            worksheet.freeze_panes(1, 0)
+                # General transit sheets
+                self._create_transit_sheet(sheet_name, df, writer, workbook, header_format, cell_format, current_time)
 
         # Close the Pandas Excel writer and output the Excel file
         writer.close()
-
         print(f"Excel file created: {filename}")
 
         return filename
 
-    # In the ExcelExporter class, add a method to determine if a yoga is positive or negative
-    @staticmethod
-    def is_positive_yoga(yoga_name):
-        """Determine if a yoga is considered positive"""
+    def _create_yoga_sheet(self, df, writer, workbook, header_format, yoga_formats):
+        """
+        Create and format the Yogas sheet.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            The yoga data
+        writer : pd.ExcelWriter
+            Excel writer object
+        workbook : xlsxwriter.Workbook
+            XlsxWriter workbook object
+        header_format : xlsxwriter.Format
+            Format for header cells
+        yoga_formats : dict
+            Dictionary of formats for each yoga nature
+        """
+        # Write the dataframe to the sheet
+        df.to_excel(writer, sheet_name="Yogas", index=False)
+        worksheet = writer.sheets["Yogas"]
+
+        # Format the headers
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+
+        # Create text-aligned format for description column
+        description_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True
+        })
+
+        # Special formats for headers that need text wrapping
+        planets_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True
+        })
+
+        # Format the data rows with color based on yoga nature
+        for row_num in range(1, len(df) + 1):
+            # Get the nature of this yoga for color formatting
+            nature = df.iloc[row_num - 1].get('Nature', 'Neutral')
+            row_format = yoga_formats.get(nature, yoga_formats['Neutral'])
+
+            # Apply format to each cell
+            for col_num, col_name in enumerate(df.columns):
+                value = df.iloc[row_num - 1, col_num]
+
+                # Use description format for Description column
+                if col_name == 'Description':
+                    worksheet.write(row_num, col_num, value, description_format)
+                # Use planets format for Planets column
+                elif col_name == 'Planets':
+                    worksheet.write(row_num, col_num, value, planets_format)
+                # Use colored format based on nature for other columns
+                else:
+                    worksheet.write(row_num, col_num, value, row_format)
+
+        # Set column widths
+        worksheet.set_column('A:A', 12)  # Date
+        worksheet.set_column('B:B', 10)  # Time
+        worksheet.set_column('C:C', 20)  # Yoga Name
+        worksheet.set_column('D:D', 40)  # Planets
+        worksheet.set_column('E:E', 12)  # Nature
+        worksheet.set_column('F:F', 60)  # Description
+
+        # Add filter and freeze panes
+        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+        worksheet.freeze_panes(1, 0)
+
+    def _create_planet_positions_sheet(self, df, writer, workbook, header_format, cell_format, current_time):
+        """
+        Create and format the Planet Positions sheet.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            The planet positions data
+        writer : pd.ExcelWriter
+            Excel writer object
+        workbook : xlsxwriter.Workbook
+            XlsxWriter workbook object
+        header_format : xlsxwriter.Format
+            Format for header cells
+        cell_format : xlsxwriter.Format
+            Format for standard cells
+        current_time : str
+            Current time string for highlighting
+        """
+        # Write the dataframe to the sheet
+        df.to_excel(writer, sheet_name="Planet Positions", index=False)
+        worksheet = writer.sheets["Planet Positions"]
+
+        # Format the headers
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+
+        # Format the data rows
+        for row_num in range(1, len(df) + 1):
+            for col_num in range(len(df.columns)):
+                worksheet.write(row_num, col_num, df.iloc[row_num - 1, col_num], cell_format)
+
+        # Set column widths
+        worksheet.set_column('A:A', 12)  # Planet column
+        worksheet.set_column('B:B', 18)  # Position column
+        worksheet.set_column('C:C', 10)  # Sign column
+        worksheet.set_column('D:D', 8)  # House column
+        worksheet.set_column('E:E', 14)  # Nakshatra column
+        worksheet.set_column('F:F', 25)  # KP Pointer column
+        worksheet.set_column('G:G', 10)  # Retrograde column
+
+        # Add filter and freeze panes
+        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+        worksheet.freeze_panes(1, 0)
+
+    def _create_hora_timing_sheet(self, df, writer, workbook, header_format, cell_format, current_time):
+        """
+        Create and format the Hora Timing sheet.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            The hora timing data
+        writer : pd.ExcelWriter
+            Excel writer object
+        workbook : xlsxwriter.Workbook
+            XlsxWriter workbook object
+        header_format : xlsxwriter.Format
+            Format for header cells
+        cell_format : xlsxwriter.Format
+            Format for standard cells
+        current_time : str
+            Current time string for highlighting
+        """
+        # Write the dataframe to the sheet
+        df.to_excel(writer, sheet_name="Hora Timing", index=False)
+        worksheet = writer.sheets["Hora Timing"]
+
+        # Format for current time highlighting
+        highlight_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'bg_color': '#FFFF00'  # Yellow
+        })
+
+        # Format the headers
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+
+        # Format the data rows with current time highlighting
+        for row_num in range(1, len(df) + 1):
+            # Check if this row corresponds to the current time
+            start_time = df.iloc[row_num - 1]['Start Time']
+            end_time = df.iloc[row_num - 1]['End Time']
+
+            row_format = cell_format
+            if start_time <= current_time <= end_time:
+                row_format = highlight_format
+
+            for col_num in range(len(df.columns)):
+                worksheet.write(row_num, col_num, df.iloc[row_num - 1, col_num], row_format)
+
+        # Set column widths
+        worksheet.set_column('A:B', 12)  # Time columns
+        worksheet.set_column('C:C', 10)  # Planet column
+        worksheet.set_column('D:D', 12)  # Day/Night column
+
+        # Add filter and freeze panes
+        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+        worksheet.freeze_panes(1, 0)
+
+    def _create_transit_sheet(self, sheet_name, df, writer, workbook, header_format, cell_format, current_time):
+        """
+        Create and format a transit sheet (Moon, Sun, etc.).
+
+        Parameters:
+        -----------
+        sheet_name : str
+            Name of the sheet
+        df : pd.DataFrame
+            The transit data
+        writer : pd.ExcelWriter
+            Excel writer object
+        workbook : xlsxwriter.Workbook
+            XlsxWriter workbook object
+        header_format : xlsxwriter.Format
+            Format for header cells
+        cell_format : xlsxwriter.Format
+            Format for standard cells
+        current_time : str
+            Current time string for highlighting
+        """
+        # Write the dataframe to the sheet
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        worksheet = writer.sheets[sheet_name]
+
+        # Format for current time highlighting
+        highlight_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'bg_color': '#FFFF00'  # Yellow
+        })
+
+        # Format for aspects column
+        aspects_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True
+        })
+
+        # Format for positive yoga
+        positive_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True,
+            'bg_color': '#E2EFDA'  # Light green
+        })
+
+        # Format for negative yoga
+        negative_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True,
+            'bg_color': '#FFCCCC'  # Light red
+        })
+
+        # Format for mixed yogas
+        mixed_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'top',
+            'text_wrap': True,
+            'bg_color': '#FFF2CC'  # Light yellow
+        })
+
+        # Format the headers
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+
+        # Define which yogas are negative
         negative_yogas = [
             "Vish Yoga", "Angarak Yoga", "Guru Chandala Yoga",
             "Graha Yuddha", "Kemadruma Yoga", "Kala Sarpa Yoga"
         ]
 
-        # If the yoga is in the negative list, it's not positive
-        return yoga_name not in negative_yogas
+        # Format the data rows with current time highlighting and aspect coloring
+        for row_num in range(1, len(df) + 1):
+            # Check if this row corresponds to the current time
+            start_time = df.iloc[row_num - 1]['Start Time']
+            end_time = df.iloc[row_num - 1]['End Time']
+
+            row_format = cell_format
+            if start_time <= current_time <= end_time:
+                row_format = highlight_format
+
+            # Apply format to each cell
+            for col_num, col_name in enumerate(df.columns):
+                value = df.iloc[row_num - 1, col_num]
+
+                # Special handling for Aspects column
+                if col_name == 'Aspects' and isinstance(value, str) and value not in ['', 'None']:
+                    # Check if the cell contains yoga information
+                    contains_positive_yoga = False
+                    contains_negative_yoga = False
+
+                    # Check each yoga in the aspects cell
+                    if "Yoga" in value:
+                        for yoga in value.split("; "):
+                            if "Yoga" in yoga:
+                                # Check if it matches any negative yoga
+                                is_negative = any(neg_yoga in yoga for neg_yoga in negative_yogas)
+                                if is_negative:
+                                    contains_negative_yoga = True
+                                else:
+                                    contains_positive_yoga = True
+
+                    # Apply formatting based on yoga type
+                    if contains_positive_yoga and not contains_negative_yoga:
+                        worksheet.write(row_num, col_num, value, positive_format)
+                    elif contains_negative_yoga and not contains_positive_yoga:
+                        worksheet.write(row_num, col_num, value, negative_format)
+                    elif contains_positive_yoga and contains_negative_yoga:
+                        worksheet.write(row_num, col_num, value, mixed_format)
+                    else:
+                        worksheet.write(row_num, col_num, value, aspects_format)
+                else:
+                    worksheet.write(row_num, col_num, value, row_format)
+
+        # Set column widths
+        worksheet.set_column('A:B', 10)  # Time columns
+        worksheet.set_column('C:C', 12)  # Position column
+        worksheet.set_column('D:D', 12)  # Rashi column
+        worksheet.set_column('E:E', 15)  # Nakshatra column
+        worksheet.set_column('F:I', 15)  # Lord columns
+        worksheet.set_column('J:J', 40)  # Aspects column (if present)
+
+        # Add filter and freeze panes
+        worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+        worksheet.freeze_panes(1, 0)
+
+    def format_yoga_planets(self, planets_list):
+        """
+        Format a list of planets information for display in the Yoga sheet.
+
+        Parameters:
+        -----------
+        planets_list : list
+            List of planet information strings
+
+        Returns:
+        --------
+        str
+            Formatted planets information string
+        """
+        if not planets_list:
+            return ""
+
+        return "\n".join(planets_list)

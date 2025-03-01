@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QLineEdit,
                              QDateEdit, QTimeEdit, QCheckBox, QGroupBox, QComboBox,
                              QProgressBar, QMessageBox, QCompleter, QScrollArea,
-                             QGridLayout, QSpinBox)
+                             QGridLayout, QSpinBox, QCalendarWidget)
 from PyQt5.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 
 from kp_data_generator import KPDataGenerator
@@ -27,34 +27,57 @@ def setup_logging():
             logging.FileHandler('kp_astrology.log')
         ]
     )
-    
+
     # Set up global exception handling
     sys.excepthook = handle_exception
-    
+
+
 def handle_exception(exc_type, exc_value, exc_traceback):
     """Handle uncaught exceptions by logging them"""
     if issubclass(exc_type, KeyboardInterrupt):
         # Don't log keyboard interrupt (Ctrl+C)
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-        
-    logging.error("Uncaught exception", 
-                 exc_info=(exc_type, exc_value, exc_traceback))
+
+    logging.error("Uncaught exception",
+                  exc_info=(exc_type, exc_value, exc_traceback))
 
 
 class GeneratorThread(QThread):
+    """
+    Thread for generating data without freezing the UI.
+    """
     progress_signal = pyqtSignal(int, str)
     finished_signal = pyqtSignal(dict)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, location, start_datetime, sheets_to_generate, selected_aspects, aspect_planets, yoga_settings=None):
+    def __init__(self, location, start_datetime, sheets_to_generate, selected_aspects,
+                 aspect_planets, yoga_settings=None):
+        """
+        Initialize the generator thread.
+
+        Parameters:
+        -----------
+        location : str
+            The location for calculations
+        start_datetime : datetime
+            The main date and time for calculations
+        sheets_to_generate : list
+            List of sheet names to generate
+        selected_aspects : list
+            List of aspect angles to calculate
+        aspect_planets : list
+            List of planets to include in aspect calculations
+        yoga_settings : dict, optional
+            Settings for yoga calculations including date range
+        """
         super().__init__()
         self.location = location
         self.start_datetime = start_datetime
         self.sheets_to_generate = sheets_to_generate
         self.selected_aspects = selected_aspects
         self.aspect_planets = aspect_planets
-        self.yoga_settings = yoga_settings  # New parameter for yoga calculations
+        self.yoga_settings = yoga_settings
 
     def run(self):
         try:
@@ -72,6 +95,8 @@ class GeneratorThread(QThread):
             if not location_data:
                 self.error_signal.emit(f"Location {self.location} not found!")
                 return
+
+            self.progress_signal.emit(5, "Initializing data generator...")
 
             # Create data generator
             generator = KPDataGenerator(
@@ -93,12 +118,12 @@ class GeneratorThread(QThread):
 
             # Planet positions sheet
             if "Planet Positions" in self.sheets_to_generate:
-                self.progress_signal.emit(5, "Generating Planet Positions...")
+                self.progress_signal.emit(10, "Generating Planet Positions...")
                 results["Planet Positions"] = generator.get_planet_positions(self.start_datetime)
 
             # Hora timing sheet
             if "Hora Timing" in self.sheets_to_generate:
-                self.progress_signal.emit(10, "Generating Hora Timing...")
+                self.progress_signal.emit(15, "Generating Hora Timing...")
                 results["Hora Timing"] = generator.get_hora_timings(self.start_datetime, end_datetime)
 
             # Planets data
@@ -108,69 +133,48 @@ class GeneratorThread(QThread):
                 "Uranus", "Neptune"
             ]
 
-            # Calculate progress distribution
-            total_items = sum(1 for p in planets if p in self.sheets_to_generate)
-            if "Yogas" in self.sheets_to_generate:
-                total_items += 1  # Add one more item for yogas
-            
-            current_progress = 15
-            progress_per_item = 70 / (total_items or 1)  # Avoid division by zero
+            # Calculate progress distribution for planet transitions
+            total_transition_items = sum(1 for p in planets if p in self.sheets_to_generate)
+            transition_progress_per_item = 40 / max(total_transition_items, 1)  # Avoid division by zero
+            current_progress = 20
 
+            # Process each planet transition
             for planet in planets:
                 if planet in self.sheets_to_generate:
                     self.progress_signal.emit(current_progress, f"Generating {planet} data...")
                     results[planet] = generator.get_planet_transitions(
                         planet, self.start_datetime, end_datetime
                     )
-                    current_progress += progress_per_item
+                    current_progress += transition_progress_per_item
                     self.progress_signal.emit(current_progress, f"Completed {planet} data")
 
             # Calculate Yogas if included
             if "Yogas" in self.sheets_to_generate and self.yoga_settings:
                 self.progress_signal.emit(current_progress, "Calculating Yogas...")
-                
+
                 yoga_start_date = self.yoga_settings["start_date"]
                 yoga_end_date = self.yoga_settings["end_date"]
-                
-                # Initialize a list to store yoga data
-                yoga_data = []
-                
-                # Calculate the total days for progress indication
-                total_days = (yoga_end_date - yoga_start_date).days + 1
-                days_processed = 0
-                
-                # Loop through each day in the range
-                current_date = yoga_start_date
-                while current_date <= yoga_end_date:
-                    self.progress_signal.emit(
-                        current_progress + (progress_per_item * days_processed / total_days),
-                        f"Calculating Yogas for {current_date.strftime('%Y-%m-%d')}..."
-                    )
-                    
-                    # Get chart data for the current date
-                    chart_data = generator.create_chart_data(current_date)
-                    planets_data = generator.get_planet_positions(current_date)
-                    
-                    # Calculate yogas for this date
-                    daily_yogas = generator.calculate_yogas(chart_data, planets_data)
-                    
-                    # Add each yoga to the list with date and time
-                    for yoga in daily_yogas:
-                        yoga_entry = {
-                            "Date": current_date.strftime("%Y-%m-%d"),
-                            "Time": current_date.strftime("%H:%M"),
-                            "Yoga Name": yoga["name"],
-                            "Planets": yoga["planets_info"]
-                        }
-                        yoga_data.append(yoga_entry)
-                    
-                    # Move to next day
-                    current_date += timedelta(days=1)
-                    days_processed += 1
-                
+
+                # Define a progress callback for yoga calculations
+                def yoga_progress_callback(current, total, message):
+                    # Calculate percentage based on current/total
+                    if total > 0:
+                        progress_percent = current / total * 30  # 30% of progress bar for yogas
+                        self.progress_signal.emit(
+                            int(current_progress + progress_percent),
+                            message
+                        )
+
+                # Calculate yogas for the date range
+                yoga_df = generator.calculate_yogas_for_date_range(
+                    yoga_start_date,
+                    yoga_end_date,
+                    progress_callback=yoga_progress_callback
+                )
+
                 # Store the yoga data in results
-                results["Yogas"] = yoga_data
-                current_progress += progress_per_item
+                results["Yogas"] = yoga_df
+                current_progress += 30
 
             self.progress_signal.emit(95, "Finalizing results...")
             self.finished_signal.emit(results)
@@ -184,6 +188,10 @@ class GeneratorThread(QThread):
 
 
 class KPAstrologyApp(QMainWindow):
+    """
+    Main application window for the KP Astrology tool.
+    """
+
     def __init__(self):
         super().__init__()
         self.aspects = [
@@ -198,11 +206,12 @@ class KPAstrologyApp(QMainWindow):
         self.sheet_names = [
             "Planet Positions", "Hora Timing", "Moon", "Ascendant",
             "Sun", "Mercury", "Venus", "Mars", "Jupiter",
-            "Saturn", "Rahu", "Ketu", "Uranus", "Neptune", "Yogas"  # Added Yogas
+            "Saturn", "Rahu", "Ketu", "Uranus", "Neptune", "Yogas"
         ]
         self.initUI()
 
     def initUI(self):
+        """Initialize the user interface."""
         self.setWindowTitle('KP Astrology Nakshatras Generator')
         self.setGeometry(100, 100, 800, 700)  # Increased height for new sections
 
@@ -236,8 +245,8 @@ class KPAstrologyApp(QMainWindow):
 
         main_layout.addWidget(location_group)
 
-        # Date and time selection
-        datetime_group = QGroupBox("Date and Time")
+        # Date and time selection for the main calculation
+        datetime_group = QGroupBox("Main Date and Time")
         datetime_layout = QVBoxLayout()
         datetime_group.setLayout(datetime_layout)
 
@@ -262,30 +271,60 @@ class KPAstrologyApp(QMainWindow):
         main_layout.addWidget(datetime_group)
 
         # Yoga date range selection
-        yoga_group = QGroupBox("Yoga Calculations")
+        yoga_group = QGroupBox("Yoga Calculations Date Range")
         yoga_layout = QVBoxLayout()
         yoga_group.setLayout(yoga_layout)
 
         # Add explanation label
-        yoga_layout.addWidget(QLabel("Date range for calculating yogas:"))
+        yoga_layout.addWidget(QLabel("Calculate yogas for the following date range:"))
 
-        # Days before current date
-        yoga_before_layout = QHBoxLayout()
-        yoga_before_layout.addWidget(QLabel("Days before:"))
-        self.yoga_days_before = QSpinBox()
-        self.yoga_days_before.setRange(0, 365)
-        self.yoga_days_before.setValue(7)  # Default value: 7 days before
-        yoga_before_layout.addWidget(self.yoga_days_before)
-        yoga_layout.addLayout(yoga_before_layout)
+        # Start date selection
+        yoga_start_layout = QHBoxLayout()
+        yoga_start_layout.addWidget(QLabel("From:"))
+        self.yoga_start_date = QDateEdit()
+        self.yoga_start_date.setCalendarPopup(True)
 
-        # Days after current date
-        yoga_after_layout = QHBoxLayout()
-        yoga_after_layout.addWidget(QLabel("Days after:"))
-        self.yoga_days_after = QSpinBox()
-        self.yoga_days_after.setRange(0, 365)
-        self.yoga_days_after.setValue(30)  # Default value: 30 days after
-        yoga_after_layout.addWidget(self.yoga_days_after)
-        yoga_layout.addLayout(yoga_after_layout)
+        # Set default to 7 days before current date
+        default_start_date = QDate.currentDate().addDays(-7)
+        self.yoga_start_date.setDate(default_start_date)
+
+        yoga_start_layout.addWidget(self.yoga_start_date)
+        yoga_layout.addLayout(yoga_start_layout)
+
+        # End date selection
+        yoga_end_layout = QHBoxLayout()
+        yoga_end_layout.addWidget(QLabel("To:"))
+        self.yoga_end_date = QDateEdit()
+        self.yoga_end_date.setCalendarPopup(True)
+
+        # Set default to 14 days after current date
+        default_end_date = QDate.currentDate().addDays(14)
+        self.yoga_end_date.setDate(default_end_date)
+
+        yoga_end_layout.addWidget(self.yoga_end_date)
+        yoga_layout.addLayout(yoga_end_layout)
+
+        # Quick date range buttons
+        quick_range_layout = QHBoxLayout()
+
+        month_btn = QPushButton("1 Month")
+        month_btn.clicked.connect(lambda: self.set_yoga_date_range(30))
+
+        quarter_btn = QPushButton("3 Months")
+        quarter_btn.clicked.connect(lambda: self.set_yoga_date_range(90))
+
+        half_year_btn = QPushButton("6 Months")
+        half_year_btn.clicked.connect(lambda: self.set_yoga_date_range(180))
+
+        year_btn = QPushButton("1 Year")
+        year_btn.clicked.connect(lambda: self.set_yoga_date_range(365))
+
+        quick_range_layout.addWidget(month_btn)
+        quick_range_layout.addWidget(quarter_btn)
+        quick_range_layout.addWidget(half_year_btn)
+        quick_range_layout.addWidget(year_btn)
+
+        yoga_layout.addLayout(quick_range_layout)
 
         main_layout.addWidget(yoga_group)
 
@@ -321,8 +360,6 @@ class KPAstrologyApp(QMainWindow):
         aspects_group.setLayout(aspects_layout)
 
         self.aspect_checkboxes = {}
-
-        # Define aspects with their symbols and names
 
         # Create a grid layout for aspect checkboxes (3 columns)
         aspect_grid = QGridLayout()
@@ -434,25 +471,61 @@ class KPAstrologyApp(QMainWindow):
         self.generate_btn.clicked.connect(self.generate_data)
         main_layout.addWidget(self.generate_btn)
 
+    def set_yoga_date_range(self, days):
+        """
+        Set the yoga date range based on number of days.
+
+        Parameters:
+        -----------
+        days : int
+            Number of days to set the range for
+        """
+        # Get the current date
+        current_date = QDate.currentDate()
+
+        # Calculate half the days before and half after
+        days_before = days // 3
+        days_after = days - days_before
+
+        # Set the start and end dates
+        self.yoga_start_date.setDate(current_date.addDays(-days_before))
+        self.yoga_end_date.setDate(current_date.addDays(days_after))
+
     def select_all_sheets(self):
+        """Select all sheet checkboxes."""
         for checkbox in self.sheet_checkboxes.values():
             checkbox.setChecked(True)
 
     def select_no_sheets(self):
+        """Deselect all sheet checkboxes."""
         for checkbox in self.sheet_checkboxes.values():
             checkbox.setChecked(False)
 
     def select_all_aspects(self):
+        """Select all aspect checkboxes."""
         for checkbox in self.aspect_checkboxes.values():
             checkbox.setChecked(True)
 
     def select_no_aspects(self):
+        """Deselect all aspect checkboxes."""
         for checkbox in self.aspect_checkboxes.values():
             checkbox.setChecked(False)
 
     @staticmethod
     def is_file_open(filepath):
-        """Check if a file is currently open by another process"""
+        """
+        Check if a file is currently open by another process.
+
+        Parameters:
+        -----------
+        filepath : str
+            Path to the file to check
+
+        Returns:
+        --------
+        bool
+            True if the file is open, False otherwise
+        """
         if not os.path.exists(filepath):
             return False
 
@@ -467,7 +540,19 @@ class KPAstrologyApp(QMainWindow):
 
     @staticmethod
     def open_excel_file(filepath):
-        """Open the Excel file using the default application"""
+        """
+        Open the Excel file using the default application.
+
+        Parameters:
+        -----------
+        filepath : str
+            Path to the Excel file
+
+        Returns:
+        --------
+        bool
+            True if successful, False otherwise
+        """
         try:
             if sys.platform == 'win32':
                 os.startfile(filepath)
@@ -483,10 +568,11 @@ class KPAstrologyApp(QMainWindow):
             return False
 
     def generate_data(self):
+        """Generate data and create Excel file."""
         try:
             # Get selected sheets
             selected_sheets = [name for name, checkbox in self.sheet_checkboxes.items()
-                            if checkbox.isChecked()]
+                               if checkbox.isChecked()]
 
             if not selected_sheets:
                 logging.warning("No sheets selected by user")
@@ -506,7 +592,7 @@ class KPAstrologyApp(QMainWindow):
 
             # Get selected planets for aspects
             selected_aspect_planets = [planet["name"] for planet in self.aspect_planets
-                                    if self.aspect_planets_checkboxes[planet["name"]].isChecked()]
+                                       if self.aspect_planets_checkboxes[planet["name"]].isChecked()]
 
             if not selected_aspect_planets:
                 logging.warning("No planets selected by user")
@@ -561,18 +647,36 @@ class KPAstrologyApp(QMainWindow):
             # Prepare yoga settings if Yogas sheet is selected
             yoga_settings = None
             if "Yogas" in selected_sheets:
-                # Calculate the start and end dates for yoga calculations
-                days_before = self.yoga_days_before.value()
-                days_after = self.yoga_days_after.value()
-                
-                yoga_start_date = start_dt - timedelta(days=days_before)
-                yoga_end_date = start_dt + timedelta(days=days_after)
-                
+                # Get the start and end dates for yoga calculations
+                yoga_start_date = self.yoga_start_date.date()
+                yoga_end_date = self.yoga_end_date.date()
+
+                # Convert QDate to Python datetime
+                start_dt_yoga = datetime(
+                    yoga_start_date.year(),
+                    yoga_start_date.month(),
+                    yoga_start_date.day(),
+                    0, 0, 0  # Start at midnight
+                )
+
+                end_dt_yoga = datetime(
+                    yoga_end_date.year(),
+                    yoga_end_date.month(),
+                    yoga_end_date.day(),
+                    23, 59, 59  # End at the end of the day
+                )
+
+                # Validate date range
+                if end_dt_yoga < start_dt_yoga:
+                    QMessageBox.warning(self, "Invalid Date Range",
+                                        "End date must be after start date for yoga calculations.")
+                    return
+
                 yoga_settings = {
-                    "start_date": yoga_start_date,
-                    "end_date": yoga_end_date
+                    "start_date": start_dt_yoga,
+                    "end_date": end_dt_yoga
                 }
-                logging.info(f"Yoga calculation range: {yoga_start_date} to {yoga_end_date}")
+                logging.info(f"Yoga calculation range: {start_dt_yoga.date()} to {end_dt_yoga.date()}")
 
             # Disable UI during generation
             self.generate_btn.setEnabled(False)
@@ -593,20 +697,38 @@ class KPAstrologyApp(QMainWindow):
             self.generator_thread.finished_signal.connect(self.export_to_excel)
             self.generator_thread.error_signal.connect(self.show_error)
             self.generator_thread.start()
-            
+
         except Exception as e:
-            error_msg = f"Error in generate_ {str(e)}"
+            error_msg = f"Error in generate_data: {str(e)}"
             logging.error(error_msg)
             logging.error(traceback.format_exc())
             self.show_error(error_msg)
             self.generate_btn.setEnabled(True)
 
     def update_progress(self, value, status):
+        """
+        Update the progress bar and status label.
+
+        Parameters:
+        -----------
+        value : int
+            Progress value (0-100)
+        status : str
+            Status message
+        """
         self.progress_bar.setValue(value)
         self.status_label.setText(status)
         logging.debug(f"Progress update: {value}% - {status}")
 
     def export_to_excel(self, results):
+        """
+        Export generated data to Excel.
+
+        Parameters:
+        -----------
+        results : dict
+            Dictionary of sheet names to dataframes
+        """
         try:
             # Create filename
             filename = "KP Panchang.xlsx"
@@ -642,6 +764,14 @@ class KPAstrologyApp(QMainWindow):
             self.status_label.setText("Ready")
 
     def show_error(self, error_message):
+        """
+        Show an error message dialog.
+
+        Parameters:
+        -----------
+        error_message : str
+            Error message to display
+        """
         logging.error(f"Application error: {error_message}")
         QMessageBox.critical(self, "Error", error_message)
         self.generate_btn.setEnabled(True)

@@ -2,143 +2,166 @@ from .base_yoga import BaseYoga
 
 
 class NeutralYogas(BaseYoga):
+    """
+    Class for calculating neutral yogas (combinations with mixed effects).
+    """
+
     def __init__(self):
+        """Initialize the neutral yogas calculator."""
         super().__init__()
 
     def check_kala_sarpa_yoga(self, chart, planets_data):
         """
-        Check for Kala Sarpa Yoga (all planets between Rahu and Ketu)
+        Check for Kala Sarpa Yoga (all planets between Rahu and Ketu).
+
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        dict or None
+            Yoga information if present, None otherwise
         """
-        rahu_data = None
-        ketu_data = None
-        other_planets = []
+        # Try to get Rahu (North Node) data
+        rahu_data = self._get_planet_by_name("Rahu", planets_data)
+        if not rahu_data:
+            rahu_data = self._get_planet_by_name("North Node", planets_data)
 
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] in ["North Node", "Rahu"]:
-                rahu_data = planet
-            elif planet['Object'] in ["South Node", "Ketu"]:
-                ketu_data = planet
-            elif planet['Object'] in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
-                other_planets.append(planet)
+        # Try to get Ketu (South Node) data
+        ketu_data = self._get_planet_by_name("Ketu", planets_data)
+        if not ketu_data:
+            ketu_data = self._get_planet_by_name("South Node", planets_data)
 
-        if rahu_data is None or ketu_data is None:
+        if not rahu_data or not ketu_data:
             return None
 
+        # Get the main planets (Sun through Saturn)
+        main_planets = []
+        for planet_data in self._iter_planets(planets_data):
+            if planet_data['Object'] in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
+                main_planets.append(planet_data)
+
+        # If no main planets found, we can't check for this yoga
+        if not main_planets:
+            return None
+
+        # Get longitudes of Rahu and Ketu
         rahu_lon = rahu_data['LonDecDeg']
         ketu_lon = ketu_data['LonDecDeg']
 
-        # Define arc from Rahu to Ketu
+        # Define arc from Rahu to Ketu (they should be roughly 180° apart)
+        # If Rahu is at a smaller longitude than Ketu
         if rahu_lon < ketu_lon:
-            # If Rahu is earlier in the zodiac than Ketu
-            rahu_ketu_arc = [rahu_lon, ketu_lon]
-        else:
-            # If Rahu is later in the zodiac than Ketu
-            rahu_ketu_arc = [rahu_lon, ketu_lon + 360]
+            # Check if all planets are between Rahu and Ketu
+            for planet in main_planets:
+                planet_lon = planet['LonDecDeg']
+                if planet_lon < rahu_lon or planet_lon > ketu_lon:
+                    return None  # Some planet is outside the Rahu-Ketu arc
+        else:  # If Rahu is at a larger longitude than Ketu
+            # Check if all planets are between Rahu and Ketu (crossing 0° boundary)
+            for planet in main_planets:
+                planet_lon = planet['LonDecDeg']
+                if planet_lon > ketu_lon and planet_lon < rahu_lon:
+                    return None  # Some planet is outside the Rahu-Ketu arc
 
-        # Check if all planets are in this arc
-        all_in_arc = True
-        for planet in other_planets:
-            lon = planet['LonDecDeg']
-            if rahu_lon < ketu_lon and (lon < rahu_lon or lon > ketu_lon):
-                all_in_arc = False
-                break
-            elif rahu_lon > ketu_lon and (ketu_lon < lon < rahu_lon):
-                all_in_arc = False
-                break
+        # If we got here, all planets are between Rahu and Ketu, so Kala Sarpa Yoga is active
+        planets_info = [
+            self._format_planet_info(rahu_data),
+            self._format_planet_info(ketu_data)
+        ]
 
-        if all_in_arc:
-            planets_info = [
-                f"Rahu ({rahu_data['Rasi']} {rahu_data['LonDecDeg']:.2f}°)",
-                f"Ketu ({ketu_data['Rasi']} {ketu_data['LonDecDeg']:.2f}°)"
-            ]
-            
-            # Add other planets to the info
-            for planet in other_planets:
-                planets_info.append(f"{planet['Object']} ({planet['Rasi']} {planet['LonDecDeg']:.2f}°)")
-                
-            return {"name": "Kala Sarpa Yoga", "planets_info": planets_info}
-        
-        return None
+        # Add other planets to the info
+        for planet in main_planets:
+            planets_info.append(self._format_planet_info(planet))
+
+        return self.create_yoga_result("Kala Sarpa Yoga", planets_info)
 
     def check_graha_malika_yoga(self, chart, planets_data):
         """
-        Check for Graha Malika Yoga (chain of planets in consecutive houses)
+        Check for Graha Malika Yoga (chain of planets in consecutive houses).
+
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        dict or None
+            Yoga information if present, None otherwise
         """
         # Create a dictionary to track which planets are in which houses
         houses_occupied = {i: [] for i in range(1, 13)}
+        planets_by_house = {i: [] for i in range(1, 13)}
 
         # Only use the main planets for this yoga
         main_planets = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]
-        planet_data_by_house = {}
 
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] in main_planets and planet['HouseNr']:
-                houses_occupied[planet['HouseNr']].append(planet['Object'])
-                if planet['HouseNr'] not in planet_data_by_house:
-                    planet_data_by_house[planet['HouseNr']] = []
-                planet_data_by_house[planet['HouseNr']].append(planet)
+        # Map planets to houses
+        for planet_data in self._iter_planets(planets_data):
+            if planet_data['Object'] in main_planets and planet_data['HouseNr']:
+                house_num = planet_data['HouseNr']
+                houses_occupied[house_num].append(planet_data['Object'])
+                planets_by_house[house_num].append(planet_data)
 
-        # Check for consecutive houses with planets
-        consecutive_count = 0
+        # Find the longest sequence of consecutive houses with planets
         max_consecutive = 0
-        consecutive_start = 0
-        
-        for i in range(1, 13):
-            if houses_occupied[i]:
-                if consecutive_count == 0:
-                    consecutive_start = i
-                consecutive_count += 1
-            else:
-                consecutive_count = 0
-            
-            if consecutive_count > max_consecutive:
-                max_consecutive = consecutive_count
-                consecutive_start_house = consecutive_start
+        start_house = 0
 
-        # Check first house after 12th to handle wrapping around the chart
-        wrap_consecutive = 0
-        wrap_start = 0
-        
-        if houses_occupied[1]:
-            # Count backwards from 12
-            for i in range(12, 0, -1):
-                if houses_occupied[i]:
-                    if wrap_consecutive == 0:
-                        wrap_start = i
-                    wrap_consecutive += 1
-                else:
+        # Check each possible starting house
+        for start in range(1, 13):
+            consecutive = 0
+            current = start
+
+            # Count consecutive houses starting from this house
+            while houses_occupied[current]:
+                consecutive += 1
+                current = current % 12 + 1
+                if current == start:  # Full circle, all houses have planets
+                    consecutive = 12
                     break
-                    
-            # Count forward from 1
-            forward_count = 0
-            for i in range(1, 13):
-                if houses_occupied[i]:
-                    forward_count += 1
-                else:
-                    break
-                    
-            if wrap_consecutive + forward_count > max_consecutive:
-                max_consecutive = wrap_consecutive + forward_count
-                consecutive_start_house = wrap_start
+
+            if consecutive > max_consecutive:
+                max_consecutive = consecutive
+                start_house = start
 
         # Need at least 5 consecutive houses with planets for Graha Malika Yoga
         if max_consecutive >= 5:
             planets_info = []
-            
+
             # Collect planets in the consecutive houses
-            for i in range(max_consecutive):
-                house = (consecutive_start_house + i - 1) % 12 + 1
-                for planet_data in planet_data_by_house.get(house, []):
-                    planets_info.append(
-                        f"{planet_data['Object']} (House {house}, {planet_data['Rasi']} {planet_data['LonDecDeg']:.2f}°)"
-                    )
-            
-            return {"name": "Graha Malika Yoga", "planets_info": planets_info}
-        
+            current = start_house
+            for _ in range(max_consecutive):
+                for planet_data in planets_by_house[current]:
+                    planets_info.append(self._format_planet_info(planet_data))
+                current = current % 12 + 1
+
+            return self.create_yoga_result("Graha Malika Yoga", planets_info)
+
         return None
 
     def get_all_neutral_yogas(self, chart, planets_data):
-        """Get all neutral yogas present in the chart"""
+        """
+        Get all neutral yogas present in the chart.
+
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        list
+            List of yoga dictionaries
+        """
         yogas = []
 
         kala_sarpa = self.check_kala_sarpa_yoga(chart, planets_data)

@@ -2,163 +2,235 @@ from .base_yoga import BaseYoga
 
 
 class NegativeYogas(BaseYoga):
+    """
+    Class for calculating negative yogas (inauspicious combinations).
+    Includes Bad and Worst yogas as defined in the metadata.
+    """
+
     def __init__(self):
+        """Initialize the negative yogas calculator."""
         super().__init__()
 
     def check_vish_yoga(self, chart, planets_data):
-        """Check for Vish Yoga (Malefic in 6, 8, 12 houses from Moon)"""
-        moon_house = None
-        moon_data = None
-        malefic_planets = []
+        """
+        Check for Vish Yoga (Malefic in 6, 8, 12 houses from Moon).
 
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Moon":
-                moon_house = planet['HouseNr']
-                moon_data = planet
-            elif planet['Object'] in ["Sun", "Mars", "Saturn", "Rahu", "Ketu", "North Node", "South Node"]:
-                malefic_planets.append(planet)
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
 
-        if moon_house:
-            vish_houses = [(moon_house + 5) % 12 + 1, (moon_house + 7) % 12 + 1, (moon_house + 11) % 12 + 1]
-            
-            involved_planets = []
-            for p in malefic_planets:
-                if p['HouseNr'] in vish_houses:
-                    involved_planets.append(f"{p['Object']} ({p['Rasi']} {p['LonDecDeg']:.2f}°)")
-            
-            if involved_planets:
-                # Add Moon to the planets info
-                if moon_data:
-                    involved_planets.insert(0, f"Moon ({moon_data['Rasi']} {moon_data['LonDecDeg']:.2f}°)")
-                
-                return {
-                    "name": "Vish Yoga", 
-                    "planets_info": involved_planets
-                }
+        Returns:
+        --------
+        dict or None
+            Yoga information if present, None otherwise
+        """
+        moon_data = self._get_planet_by_name("Moon", planets_data)
+        if not moon_data or not moon_data['HouseNr']:
+            return None
 
-        return False
+        moon_house = moon_data['HouseNr']
+
+        # Calculate the 6th, 8th, and 12th houses from Moon
+        vish_houses = [
+            (moon_house + 5) % 12 + 1,  # 6th from Moon
+            (moon_house + 7) % 12 + 1,  # 8th from Moon
+            (moon_house + 11) % 12 + 1  # 12th from Moon
+        ]
+
+        # Check for malefics in these houses
+        malefics_in_vish_houses = []
+
+        for planet_data in self._iter_planets(planets_data):
+            if (planet_data['Object'] in self.malefic_planets and
+                    planet_data['HouseNr'] in vish_houses):
+                malefics_in_vish_houses.append(planet_data)
+
+        if malefics_in_vish_houses:
+            planets_info = [self._format_planet_info(moon_data)]
+            planets_info.extend([self._format_planet_info(planet) for planet in malefics_in_vish_houses])
+            return self.create_yoga_result("Vish Yoga", planets_info)
+
+        return None
 
     def check_angarak_yoga(self, chart, planets_data):
-        """Check for Angarak Yoga - Mars in 1st, 4th, 7th, 8th, or 12th house"""
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Mars" and planet['HouseNr'] in [1, 4, 7, 8, 12]:
-                planets_info = [
-                    f"Mars (House {planet['HouseNr']}, {planet['Rasi']} {planet['LonDecDeg']:.2f}°)"
-                ]
-                return {"name": "Angarak Yoga", "planets_info": planets_info}
+        """
+        Check for Angarak Yoga - Mars in 1st, 4th, 7th, 8th, or 12th house.
+
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        dict or None
+            Yoga information if present, None otherwise
+        """
+        mars_data = self._get_planet_by_name("Mars", planets_data)
+
+        if mars_data and mars_data['HouseNr'] in [1, 4, 7, 8, 12]:
+            planets_info = [self._format_planet_info(mars_data)]
+            return self.create_yoga_result("Angarak Yoga", planets_info)
+
         return None
 
     def check_guru_chandala_yoga(self, chart, planets_data):
-        """Check for Guru Chandala Yoga - Rahu and Jupiter conjunction"""
-        jupiter_data = None
-        rahu_data = None
-        
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Jupiter":
-                jupiter_data = planet
-            elif planet['Object'] in ["Rahu", "North Node"]:
-                rahu_data = planet
-        
-        if jupiter_data and rahu_data and (
-            self._are_specific_planets_conjunct("Jupiter", "Rahu", planets_data) or
-            self._are_specific_planets_conjunct("Jupiter", "North Node", planets_data)
-        ):
+        """
+        Check for Guru Chandala Yoga - Rahu and Jupiter conjunction.
+
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        dict or None
+            Yoga information if present, None otherwise
+        """
+        jupiter_data = self._get_planet_by_name("Jupiter", planets_data)
+
+        # Try both Rahu and North Node (handle different naming conventions)
+        rahu_data = self._get_planet_by_name("Rahu", planets_data)
+        if not rahu_data:
+            rahu_data = self._get_planet_by_name("North Node", planets_data)
+
+        if jupiter_data and rahu_data and jupiter_data['Rasi'] == rahu_data['Rasi']:
             planets_info = [
-                f"Jupiter ({jupiter_data['Rasi']} {jupiter_data['LonDecDeg']:.2f}°)",
-                f"Rahu ({rahu_data['Rasi']} {rahu_data['LonDecDeg']:.2f}°)"
+                self._format_planet_info(jupiter_data),
+                self._format_planet_info(rahu_data)
             ]
-            return {"name": "Guru Chandala Yoga", "planets_info": planets_info}
-        
+            return self.create_yoga_result("Guru Chandala Yoga", planets_info)
+
         return None
 
     def check_graha_yuddha(self, chart, planets_data):
-        """Check for Graha Yuddha (Planetary War) - Two planets in close conjunction within 1 degree"""
-        yuddha_yogas = []
-        planets_list = list(self._iter_planets(planets_data))
-        
-        for i, planet1 in enumerate(planets_list):
-            if planet1['Object'] not in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
-                continue
+        """
+        Check for Graha Yuddha (Planetary War) - Two planets in close conjunction within 1 degree.
 
-            for j in range(i + 1, len(planets_list)):
-                planet2 = planets_list[j]
-                if planet2['Object'] not in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
-                    continue
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        list
+            List of yoga dictionaries
+        """
+        yuddha_yogas = []
+
+        # Get all main planets (exclude Rahu, Ketu, etc.)
+        main_planets = []
+        for planet_data in self._iter_planets(planets_data):
+            if planet_data['Object'] in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
+                main_planets.append(planet_data)
+
+        # Check each pair of planets
+        for i in range(len(main_planets)):
+            for j in range(i + 1, len(main_planets)):
+                planet1 = main_planets[i]
+                planet2 = main_planets[j]
 
                 # Calculate separation angle
                 angle = abs(planet1['LonDecDeg'] - planet2['LonDecDeg'])
                 if angle > 180:
                     angle = 360 - angle
 
+                # Planetary war occurs when planets are within 1 degree
                 if angle < 1:
                     planets_info = [
-                        f"{planet1['Object']} ({planet1['Rasi']} {planet1['LonDecDeg']:.2f}°)",
-                        f"{planet2['Object']} ({planet2['Rasi']} {planet2['LonDecDeg']:.2f}°)"
+                        self._format_planet_info(planet1),
+                        self._format_planet_info(planet2)
                     ]
-                    yuddha_yogas.append({
-                        "name": f"Graha Yuddha ({planet1['Object']}-{planet2['Object']})",
-                        "planets_info": planets_info
-                    })
+                    yuddha_yogas.append(self.create_yoga_result(
+                        f"Graha Yuddha ({planet1['Object']}-{planet2['Object']})",
+                        planets_info
+                    ))
 
         return yuddha_yogas
 
     def check_kemadruma_yoga(self, chart, planets_data):
         """
-        Check for Kemadruma Yoga - Moon with no planets in 2nd, 12th, 
-        or its own sign and no aspects
-        """
-        moon_data = None
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Moon":
-                moon_data = planet
-                break
+        Check for Kemadruma Yoga - Moon with no planets in 2nd, 12th,
+        or its own sign and no aspects.
 
-        if not moon_data:
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        dict or None
+            Yoga information if present, None otherwise
+        """
+        moon_data = self._get_planet_by_name("Moon", planets_data)
+        if not moon_data or not moon_data['HouseNr']:
             return None
 
-        # Find Moon's house
         moon_house = moon_data['HouseNr']
-
-        # Check if planets occupy 2nd from Moon, 12th from Moon, or same sign as Moon
-        has_supporting_planet = False
-        supporting_planet = None
 
         # Calculate 2nd and 12th houses from Moon
         second_from_moon = moon_house % 12 + 1
         twelfth_from_moon = (moon_house - 2) % 12 + 1
 
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Moon":
+        # Check if any planet is in 2nd or 12th from Moon, or in same sign as Moon, or aspects Moon
+        supporting_planet_found = False
+
+        for planet_data in self._iter_planets(planets_data):
+            # Skip Moon itself
+            if planet_data['Object'] == "Moon":
                 continue
 
             # Check if planet is in 2nd or 12th from Moon
-            if planet['HouseNr'] in [second_from_moon, twelfth_from_moon]:
-                has_supporting_planet = True
-                supporting_planet = planet
+            if planet_data['HouseNr'] in [second_from_moon, twelfth_from_moon]:
+                supporting_planet_found = True
                 break
 
             # Check if planet is in same sign as Moon
-            if planet['Rasi'] == moon_data['Rasi']:
-                has_supporting_planet = True
-                supporting_planet = planet
+            if planet_data['Rasi'] == moon_data['Rasi']:
+                supporting_planet_found = True
                 break
 
-            # Check if planet is aspecting Moon (simplified check)
-            if self._are_planets_in_aspect(planet['Object'], "Moon", planets_data):
-                has_supporting_planet = True
-                supporting_planet = planet
+            # Check if planet aspects Moon
+            if self._are_planets_in_aspect(planet_data['Object'], "Moon", planets_data):
+                supporting_planet_found = True
                 break
 
-        if not has_supporting_planet:
-            planets_info = [
-                f"Moon ({moon_data['Rasi']} {moon_data['LonDecDeg']:.2f}°)"
-            ]
-            return {"name": "Kemadruma Yoga", "planets_info": planets_info}
-        
+        if not supporting_planet_found:
+            planets_info = [self._format_planet_info(moon_data)]
+            return self.create_yoga_result("Kemadruma Yoga", planets_info)
+
         return None
 
     def get_all_negative_yogas(self, chart, planets_data):
-        """Get all negative yogas present in the chart"""
+        """
+        Get all negative yogas present in the chart.
+
+        Parameters:
+        -----------
+        chart : VedicHoroscopeData
+            The chart data object
+        planets_data : DataFrame or list
+            Planetary position data
+
+        Returns:
+        --------
+        list
+            List of yoga dictionaries
+        """
         yogas = []
 
         vish_yoga = self.check_vish_yoga(chart, planets_data)
