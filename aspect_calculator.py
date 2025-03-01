@@ -61,7 +61,7 @@ class AspectCalculator:
         planet_retrograde = {}
 
         # Extract planet positions and retrograde status
-        for planet in planets_
+        for planet in planets_data:
             name = planet.Object
 
             # Get the display name for this planet (to check against selected_planets)
@@ -111,7 +111,7 @@ class AspectCalculator:
                             p2_name += "(Ret.)"
 
                         # Calculate exact orb
-                        exact_orb = round(abs(degree_diff - angle), 1)
+                        # exact_orb = round(abs(degree_diff - angle), 1)
 
                         # Add the aspect with the symbol
                         aspects.append(f"{p1_name} {aspect_info['symbol']} {p2_name} ({aspect_info['name']}) - {angle}°")
@@ -126,7 +126,7 @@ class AspectCalculator:
 
     def check_retrograde_changes(self, previous_data, current_data):
         """Check if any planet changed retrograde status"""
-        if not previous_
+        if not previous_data:
             return []
 
         changes = []
@@ -145,7 +145,7 @@ class AspectCalculator:
                 continue
 
             # Look for the same planet in previous data
-            for prev_planet in previous_
+            for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
                     # Check if retrograde status changed
                     if planet.isRetroGrade != prev_planet.isRetroGrade:
@@ -157,11 +157,11 @@ class AspectCalculator:
 
     def check_sign_changes(self, previous_data, current_data):
         """Check if any planet changed signs"""
-        if not previous_
+        if not previous_data:
             return []
 
         changes = []
-        for planet in current_
+        for planet in current_data:
             # Get the display name for this planet
             display_name = planet.Object
             if display_name == "North Node":
@@ -176,7 +176,7 @@ class AspectCalculator:
                 continue
 
             # Look for the same planet in previous data
-            for prev_planet in previous_
+            for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
                     # Check if sign changed
                     if planet.Rasi != prev_planet.Rasi:
@@ -191,7 +191,7 @@ class AspectCalculator:
             return []
 
         changes = []
-        for planet in current_
+        for planet in current_data:
             # Get the display name for this planet
             display_name = planet.Object
             if display_name == "North Node":
@@ -206,7 +206,7 @@ class AspectCalculator:
                 continue
 
             # Look for the same planet in previous data
-            for prev_planet in previous_
+            for prev_planet in previous_data:
                 if planet.Object == prev_planet.Object:
                     # Check if nakshatra changed
                     if planet.Nakshatra != prev_planet.Nakshatra:
