@@ -9,17 +9,23 @@ class NeutralYogas(BaseYoga):
         """
         Check for Kala Sarpa Yoga (all planets between Rahu and Ketu)
         """
-        rahu_lon = None
-        ketu_lon = None
+        rahu_data = None
+        ketu_data = None
+        other_planets = []
 
         for planet in self._iter_planets(planets_data):
             if planet['Object'] in ["North Node", "Rahu"]:
-                rahu_lon = planet['LonDecDeg']
+                rahu_data = planet
             elif planet['Object'] in ["South Node", "Ketu"]:
-                ketu_lon = planet['LonDecDeg']
+                ketu_data = planet
+            elif planet['Object'] in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
+                other_planets.append(planet)
 
-        if rahu_lon is None or ketu_lon is None:
-            return False
+        if rahu_data is None or ketu_data is None:
+            return None
+
+        rahu_lon = rahu_data['LonDecDeg']
+        ketu_lon = ketu_data['LonDecDeg']
 
         # Define arc from Rahu to Ketu
         if rahu_lon < ketu_lon:
@@ -31,17 +37,28 @@ class NeutralYogas(BaseYoga):
 
         # Check if all planets are in this arc
         all_in_arc = True
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
-                lon = planet['LonDecDeg']
-                if rahu_lon < ketu_lon and (lon < rahu_lon or lon > ketu_lon):
-                    all_in_arc = False
-                    break
-                elif rahu_lon > ketu_lon and (ketu_lon < lon < rahu_lon):
-                    all_in_arc = False
-                    break
+        for planet in other_planets:
+            lon = planet['LonDecDeg']
+            if rahu_lon < ketu_lon and (lon < rahu_lon or lon > ketu_lon):
+                all_in_arc = False
+                break
+            elif rahu_lon > ketu_lon and (ketu_lon < lon < rahu_lon):
+                all_in_arc = False
+                break
 
-        return "Kala Sarpa Yoga" if all_in_arc else None
+        if all_in_arc:
+            planets_info = [
+                f"Rahu ({rahu_data['Rasi']} {rahu_data['LonDecDeg']:.2f}°)",
+                f"Ketu ({ketu_data['Rasi']} {ketu_data['LonDecDeg']:.2f}°)"
+            ]
+            
+            # Add other planets to the info
+            for planet in other_planets:
+                planets_info.append(f"{planet['Object']} ({planet['Rasi']} {planet['LonDecDeg']:.2f}°)")
+                
+            return {"name": "Kala Sarpa Yoga", "planets_info": planets_info}
+        
+        return None
 
     def check_graha_malika_yoga(self, chart, planets_data):
         """
@@ -52,37 +69,73 @@ class NeutralYogas(BaseYoga):
 
         # Only use the main planets for this yoga
         main_planets = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]
+        planet_data_by_house = {}
 
         for planet in self._iter_planets(planets_data):
             if planet['Object'] in main_planets and planet['HouseNr']:
                 houses_occupied[planet['HouseNr']].append(planet['Object'])
+                if planet['HouseNr'] not in planet_data_by_house:
+                    planet_data_by_house[planet['HouseNr']] = []
+                planet_data_by_house[planet['HouseNr']].append(planet)
 
         # Check for consecutive houses with planets
         consecutive_count = 0
         max_consecutive = 0
+        consecutive_start = 0
+        
         for i in range(1, 13):
             if houses_occupied[i]:
+                if consecutive_count == 0:
+                    consecutive_start = i
                 consecutive_count += 1
             else:
                 consecutive_count = 0
-            max_consecutive = max(max_consecutive, consecutive_count)
+            
+            if consecutive_count > max_consecutive:
+                max_consecutive = consecutive_count
+                consecutive_start_house = consecutive_start
 
         # Check first house after 12th to handle wrapping around the chart
-        if houses_occupied[1] and consecutive_count > 0:
-            # Count how many houses going backward from 12 are occupied
-            back_count = 0
+        wrap_consecutive = 0
+        wrap_start = 0
+        
+        if houses_occupied[1]:
+            # Count backwards from 12
             for i in range(12, 0, -1):
                 if houses_occupied[i]:
-                    back_count += 1
+                    if wrap_consecutive == 0:
+                        wrap_start = i
+                    wrap_consecutive += 1
                 else:
                     break
-
-            if back_count > 0:
-                # Adjust max consecutive to account for wrapping
-                max_consecutive = max(max_consecutive, consecutive_count + back_count)
+                    
+            # Count forward from 1
+            forward_count = 0
+            for i in range(1, 13):
+                if houses_occupied[i]:
+                    forward_count += 1
+                else:
+                    break
+                    
+            if wrap_consecutive + forward_count > max_consecutive:
+                max_consecutive = wrap_consecutive + forward_count
+                consecutive_start_house = wrap_start
 
         # Need at least 5 consecutive houses with planets for Graha Malika Yoga
-        return "Graha Malika Yoga" if max_consecutive >= 5 else None
+        if max_consecutive >= 5:
+            planets_info = []
+            
+            # Collect planets in the consecutive houses
+            for i in range(max_consecutive):
+                house = (consecutive_start_house + i - 1) % 12 + 1
+                for planet_data in planet_data_by_house.get(house, []):
+                    planets_info.append(
+                        f"{planet_data['Object']} (House {house}, {planet_data['Rasi']} {planet_data['LonDecDeg']:.2f}°)"
+                    )
+            
+            return {"name": "Graha Malika Yoga", "planets_info": planets_info}
+        
+        return None
 
     def get_all_neutral_yogas(self, chart, planets_data):
         """Get all neutral yogas present in the chart"""

@@ -7,37 +7,48 @@ class PositiveYogas(BaseYoga):
 
     def check_budha_aditya(self, chart, planets_data):
         """Check for Budha-Aditya Yoga (Mercury and Sun in same sign)"""
-        sun_sign = None
-        mercury_sign = None
+        sun_data = None
+        mercury_data = None
 
         for planet in self._iter_planets(planets_data):
             if planet['Object'] == "Sun":
-                sun_sign = planet['Rasi']
+                sun_data = planet
             elif planet['Object'] == "Mercury":
-                mercury_sign = planet['Rasi']
+                mercury_data = planet
 
-        return sun_sign and mercury_sign and sun_sign == mercury_sign
+        if sun_data and mercury_data and sun_data['Rasi'] == mercury_data['Rasi']:
+            planets_info = [
+                f"Sun ({sun_data['Rasi']} {sun_data['LonDecDeg']:.2f}°)",
+                f"Mercury ({mercury_data['Rasi']} {mercury_data['LonDecDeg']:.2f}°)"
+            ]
+            return {"name": "Budha-Aditya Yoga", "planets_info": planets_info}
+        return None
 
     def check_gaja_kesari(self, chart, planets_data):
         """Check for Gaja-Kesari Yoga (Jupiter and Moon in quadrant from each other)"""
-        moon_pos = None
-        jupiter_pos = None
+        moon_data = None
+        jupiter_data = None
 
         for planet in self._iter_planets(planets_data):
             if planet['Object'] == "Moon":
-                moon_pos = planet['LonDecDeg']
+                moon_data = planet
             elif planet['Object'] == "Jupiter":
-                jupiter_pos = planet['LonDecDeg']
+                jupiter_data = planet
 
-        if moon_pos is not None and jupiter_pos is not None:
-            angle = abs(moon_pos - jupiter_pos)
+        if moon_data is not None and jupiter_data is not None:
+            angle = abs(moon_data['LonDecDeg'] - jupiter_data['LonDecDeg'])
             if angle > 180:
                 angle = 360 - angle
 
             # Check for quadrant (1, 4, 7, 10 houses - approximately 90° multiples)
-            return abs(angle - 90) <= 10 or abs(angle - 270) <= 10
+            if abs(angle - 90) <= 10 or abs(angle - 270) <= 10:
+                planets_info = [
+                    f"Moon ({moon_data['Rasi']} {moon_data['LonDecDeg']:.2f}°)",
+                    f"Jupiter ({jupiter_data['Rasi']} {jupiter_data['LonDecDeg']:.2f}°)"
+                ]
+                return {"name": "Gaja-Kesari Yoga", "planets_info": planets_info}
 
-        return False
+        return None
 
     def check_neech_bhanga(self, chart, planets_data):
         """Check for Neech Bhanga Raja Yoga (Debilitated planet with cancellation)"""
@@ -69,21 +80,27 @@ class PositiveYogas(BaseYoga):
         }
 
         # Check if any planet is in debilitation and if its lord is well-placed
-        for planet in self._iter_planets(planets_data):
-            name = planet['Object']
-            if name in debilitation and planet['Rasi'] == debilitation[name]:
+        for planet_data in self._iter_planets(planets_data):
+            name = planet_data['Object']
+            if name in debilitation and planet_data['Rasi'] == debilitation[name]:
                 # Planet is debilitated
-                lord_of_sign = sign_lords[planet['Rasi']]
+                lord_of_sign = sign_lords[planet_data['Rasi']]
+                lord_data = None
 
                 # Check if lord is exalted or in a good house
                 for other_planet in self._iter_planets(planets_data):
                     if other_planet['Object'] == lord_of_sign:
+                        lord_data = other_planet
                         # If lord is in a kendra (1, 4, 7, 10) or trikona (1, 5, 9) house
                         good_houses = [1, 4, 5, 7, 9, 10]
                         if other_planet['HouseNr'] in good_houses:
-                            return True
+                            planets_info = [
+                                f"{name} ({planet_data['Rasi']} {planet_data['LonDecDeg']:.2f}°)",
+                                f"{lord_of_sign} ({lord_data['Rasi']} {lord_data['LonDecDeg']:.2f}°)"
+                            ]
+                            return {"name": "Neech Bhanga Raja Yoga", "planets_info": planets_info}
 
-        return False
+        return None
 
     def check_pancha_mahapurusha_yoga(self, chart, planets_data):
         """
@@ -118,26 +135,28 @@ class PositiveYogas(BaseYoga):
         kendras = [1, 4, 7, 10]
 
         # Check each planet
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] in own_signs:
+        for planet_data in self._iter_planets(planets_data):
+            if planet_data['Object'] in own_signs:
                 # Check if planet is in own sign or exalted
-                in_own_sign = planet['Rasi'] in own_signs[planet['Object']]
-                in_exalted = planet['Rasi'] == exalted_signs[planet['Object']]
+                in_own_sign = planet_data['Rasi'] in own_signs[planet_data['Object']]
+                in_exalted = planet_data['Rasi'] == exalted_signs[planet_data['Object']]
 
                 # Check if in kendra house
-                in_kendra = planet['HouseNr'] in kendras
+                in_kendra = planet_data['HouseNr'] in kendras
 
                 if (in_own_sign or in_exalted) and in_kendra:
-                    if planet['Object'] == "Mars":
-                        active_yogas.append("Ruchaka Yoga")
-                    elif planet['Object'] == "Mercury":
-                        active_yogas.append("Bhadra Yoga")
-                    elif planet['Object'] == "Jupiter":
-                        active_yogas.append("Hamsa Yoga")
-                    elif planet['Object'] == "Venus":
-                        active_yogas.append("Malavya Yoga")
-                    elif planet['Object'] == "Saturn":
-                        active_yogas.append("Sasa Yoga")
+                    planet_info = f"{planet_data['Object']} ({planet_data['Rasi']} {planet_data['LonDecDeg']:.2f}°)"
+                    
+                    if planet_data['Object'] == "Mars":
+                        active_yogas.append({"name": "Ruchaka Yoga", "planets_info": [planet_info]})
+                    elif planet_data['Object'] == "Mercury":
+                        active_yogas.append({"name": "Bhadra Yoga", "planets_info": [planet_info]})
+                    elif planet_data['Object'] == "Jupiter":
+                        active_yogas.append({"name": "Hamsa Yoga", "planets_info": [planet_info]})
+                    elif planet_data['Object'] == "Venus":
+                        active_yogas.append({"name": "Malavya Yoga", "planets_info": [planet_info]})
+                    elif planet_data['Object'] == "Saturn":
+                        active_yogas.append({"name": "Sasa Yoga", "planets_info": [planet_info]})
 
         return active_yogas
 
@@ -152,27 +171,58 @@ class PositiveYogas(BaseYoga):
         for i in range(1, 13):
             house_lords[i] = self._get_house_lord(i, planets_data)
 
-        # Check specific house combinations
+        # Get planet data for lookup
+        planet_data_map = {}
+        for planet_data in self._iter_planets(planets_data):
+            planet_data_map[planet_data['Object']] = planet_data
 
         # 1. Lords of 5th and 9th houses together or in exchange
-        if self._are_planets_conjunct(house_lords.get(5), house_lords.get(9), planets_data) or \
-                self._are_planets_in_exchange(house_lords.get(5), house_lords.get(9), planets_data):
-            active_yogas.append("Lakshmi Yoga")
+        if house_lords.get(5) and house_lords.get(9):
+            lord5_data = planet_data_map.get(house_lords[5])
+            lord9_data = planet_data_map.get(house_lords[9])
+            
+            if lord5_data and lord9_data:
+                if self._are_planets_conjunct(house_lords.get(5), house_lords.get(9), planets_data) or \
+                        self._are_planets_in_exchange(house_lords.get(5), house_lords.get(9), planets_data):
+                    planets_info = [
+                        f"{house_lords[5]} (Lord of 5th, {lord5_data['Rasi']} {lord5_data['LonDecDeg']:.2f}°)",
+                        f"{house_lords[9]} (Lord of 9th, {lord9_data['Rasi']} {lord9_data['LonDecDeg']:.2f}°)"
+                    ]
+                    active_yogas.append({"name": "Lakshmi Yoga", "planets_info": planets_info})
 
         # 2. Lords of 2nd and 11th houses conjunct or in exchange
-        if self._are_planets_conjunct(house_lords.get(2), house_lords.get(11), planets_data) or \
-                self._are_planets_in_exchange(house_lords.get(2), house_lords.get(11), planets_data):
-            active_yogas.append("Dhana Yoga")
+        if house_lords.get(2) and house_lords.get(11):
+            lord2_data = planet_data_map.get(house_lords[2])
+            lord11_data = planet_data_map.get(house_lords[11])
+            
+            if lord2_data and lord11_data:
+                if self._are_planets_conjunct(house_lords.get(2), house_lords.get(11), planets_data) or \
+                        self._are_planets_in_exchange(house_lords.get(2), house_lords.get(11), planets_data):
+                    planets_info = [
+                        f"{house_lords[2]} (Lord of 2nd, {lord2_data['Rasi']} {lord2_data['LonDecDeg']:.2f}°)",
+                        f"{house_lords[11]} (Lord of 11th, {lord11_data['Rasi']} {lord11_data['LonDecDeg']:.2f}°)"
+                    ]
+                    active_yogas.append({"name": "Dhana Yoga", "planets_info": planets_info})
 
         # 3. Jupiter in 2nd or 5th or 11th house
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Jupiter" and planet['HouseNr'] in [2, 5, 11]:
-                active_yogas.append("Guru-Mangala Yoga")
+        for planet_data in self._iter_planets(planets_data):
+            if planet_data['Object'] == "Jupiter" and planet_data['HouseNr'] in [2, 5, 11]:
+                planets_info = [
+                    f"Jupiter (House {planet_data['HouseNr']}, {planet_data['Rasi']} {planet_data['LonDecDeg']:.2f}°)"
+                ]
+                active_yogas.append({"name": "Guru-Mangala Yoga", "planets_info": planets_info})
                 break
 
         # 4. Venus and Jupiter conjunction
-        if self._are_specific_planets_conjunct("Venus", "Jupiter", planets_data):
-            active_yogas.append("Guru-Shukra Yoga")
+        venus_data = planet_data_map.get("Venus")
+        jupiter_data = planet_data_map.get("Jupiter")
+        
+        if venus_data and jupiter_data and self._are_specific_planets_conjunct("Venus", "Jupiter", planets_data):
+            planets_info = [
+                f"Venus ({venus_data['Rasi']} {venus_data['LonDecDeg']:.2f}°)",
+                f"Jupiter ({jupiter_data['Rasi']} {jupiter_data['LonDecDeg']:.2f}°)"
+            ]
+            active_yogas.append({"name": "Guru-Shukra Yoga", "planets_info": planets_info})
 
         return active_yogas
 
@@ -187,6 +237,11 @@ class PositiveYogas(BaseYoga):
         for i in range(1, 13):
             house_lords[i] = self._get_house_lord(i, planets_data)
 
+        # Get planet data for lookup
+        planet_data_map = {}
+        for planet_data in self._iter_planets(planets_data):
+            planet_data_map[planet_data['Object']] = planet_data
+
         # 1. Lords of trine houses (1,5,9) and kendra houses (1,4,7,10) conjunct
         trine_lords = [house_lords.get(1), house_lords.get(5), house_lords.get(9)]
         kendra_lords = [house_lords.get(1), house_lords.get(4), house_lords.get(7), house_lords.get(10)]
@@ -194,41 +249,52 @@ class PositiveYogas(BaseYoga):
         for trine_lord in trine_lords:
             for kendra_lord in kendra_lords:
                 if trine_lord and kendra_lord and trine_lord != kendra_lord:
-                    if self._are_planets_conjunct(trine_lord, kendra_lord, planets_data):
-                        active_yogas.append("Raja Yoga")
+                    trine_lord_data = planet_data_map.get(trine_lord)
+                    kendra_lord_data = planet_data_map.get(kendra_lord)
+                    
+                    if trine_lord_data and kendra_lord_data and self._are_planets_conjunct(trine_lord, kendra_lord, planets_data):
+                        planets_info = [
+                            f"{trine_lord} (Trine Lord, {trine_lord_data['Rasi']} {trine_lord_data['LonDecDeg']:.2f}°)",
+                            f"{kendra_lord} (Kendra Lord, {kendra_lord_data['Rasi']} {kendra_lord_data['LonDecDeg']:.2f}°)"
+                        ]
+                        active_yogas.append({"name": "Raja Yoga", "planets_info": planets_info})
 
         # 2. Gajakesari Yoga - Moon and Jupiter in kendra from each other
-        moon_pos = None
-        jupiter_pos = None
+        moon_data = planet_data_map.get("Moon")
+        jupiter_data = planet_data_map.get("Jupiter")
 
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Moon":
-                moon_pos = planet['LonDecDeg']
-            elif planet['Object'] == "Jupiter":
-                jupiter_pos = planet['LonDecDeg']
-
-        if moon_pos is not None and jupiter_pos is not None:
-            angle = abs(moon_pos - jupiter_pos)
+        if moon_data and jupiter_data:
+            angle = abs(moon_data['LonDecDeg'] - jupiter_data['LonDecDeg'])
             if angle > 180:
                 angle = 360 - angle
 
             # Check if they're in quadrant (1, 4, 7, 10 houses - approximately 90° multiples)
             if abs(angle - 90) <= 10 or abs(angle - 180) <= 10 or abs(angle - 270) <= 10:
-                active_yogas.append("Gajakesari Yoga")
+                planets_info = [
+                    f"Moon ({moon_data['Rasi']} {moon_data['LonDecDeg']:.2f}°)",
+                    f"Jupiter ({jupiter_data['Rasi']} {jupiter_data['LonDecDeg']:.2f}°)"
+                ]
+                active_yogas.append({"name": "Gajakesari Yoga", "planets_info": planets_info})
 
         # 3. Sun in 10th house with Jupiter or Venus aspect
         sun_in_10th = False
-        for planet in self._iter_planets(planets_data):
-            if planet['Object'] == "Sun" and planet['HouseNr'] == 10:
+        sun_data = None
+        for planet_data in self._iter_planets(planets_data):
+            if planet_data['Object'] == "Sun" and planet_data['HouseNr'] == 10:
                 sun_in_10th = True
+                sun_data = planet_data
                 break
 
-        if sun_in_10th:
+        if sun_in_10th and sun_data:
             # Check for Jupiter or Venus aspect to the 10th house
-            for planet in self._iter_planets(planets_data):
-                if (planet['Object'] == "Jupiter" or planet['Object'] == "Venus") and \
-                        self._is_planet_aspecting_house(planet, 10, planets_data):
-                    active_yogas.append("Amala Yoga")
+            for planet_data in self._iter_planets(planets_data):
+                if (planet_data['Object'] == "Jupiter" or planet_data['Object'] == "Venus") and \
+                        self._is_planet_aspecting_house(planet_data, 10, planets_data):
+                    planets_info = [
+                        f"Sun (10th House, {sun_data['Rasi']} {sun_data['LonDecDeg']:.2f}°)",
+                        f"{planet_data['Object']} (Aspecting 10th, {planet_data['Rasi']} {planet_data['LonDecDeg']:.2f}°)"
+                    ]
+                    active_yogas.append({"name": "Amala Yoga", "planets_info": planets_info})
                     break
 
         return active_yogas
@@ -238,14 +304,17 @@ class PositiveYogas(BaseYoga):
         yogas = []
 
         # Individual yoga checks
-        if self.check_budha_aditya(chart, planets_data):
-            yogas.append("Budha-Aditya Yoga")
+        budha_aditya = self.check_budha_aditya(chart, planets_data)
+        if budha_aditya:
+            yogas.append(budha_aditya)
 
-        if self.check_gaja_kesari(chart, planets_data):
-            yogas.append("Gaja-Kesari Yoga")
+        gaja_kesari = self.check_gaja_kesari(chart, planets_data)
+        if gaja_kesari:
+            yogas.append(gaja_kesari)
 
-        if self.check_neech_bhanga(chart, planets_data):
-            yogas.append("Neech Bhanga Raja Yoga")
+        neech_bhanga = self.check_neech_bhanga(chart, planets_data)
+        if neech_bhanga:
+            yogas.append(neech_bhanga)
 
         # Collection yoga checks
         yogas.extend(self.check_pancha_mahapurusha_yoga(chart, planets_data))
