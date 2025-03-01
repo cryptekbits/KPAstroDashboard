@@ -3,11 +3,12 @@ from kpTools.VedicAstro import VedicHoroscopeData
 import pytz
 from datetime import datetime
 
+
 class PlanetPositionCalculator:
     """
     Class for calculating and formatting planetary positions.
     """
-    
+
     def __init__(self, latitude, longitude, timezone, ayanamsa="Krishnamurti", house_system="Placidus"):
         """
         Initialize with location information.
@@ -37,7 +38,7 @@ class PlanetPositionCalculator:
         offset = now.strftime('%z')
         hours, minutes = int(offset[0:3]), int(offset[0] + offset[3:5])
         self.utc_offset = f"{'+' if hours >= 0 else ''}{hours}:{minutes:02d}"
-        
+
         # Planet mapping (name in library to display name)
         self.planet_mapping = {
             "Moon": "Moon",
@@ -56,7 +57,7 @@ class PlanetPositionCalculator:
 
         # Reverse mapping for lookup
         self.reverse_planet_mapping = {v: k for k, v in self.planet_mapping.items()}
-        
+
     def create_chart_data(self, dt):
         """
         Create VedicHoroscopeData for the given datetime.
@@ -72,7 +73,7 @@ class PlanetPositionCalculator:
             The chart data object
         """
         from datetime import datetime
-        
+
         # Make sure datetime is timezone aware
         if dt.tzinfo is None:
             dt = self.tz.localize(dt)
@@ -92,8 +93,9 @@ class PlanetPositionCalculator:
         )
 
         return chart_data
-        
-    def format_position(self, planet):
+
+    @staticmethod
+    def format_position(planet):
         """
         Format planet position consistently as degrees within sign
         
@@ -131,7 +133,7 @@ class PlanetPositionCalculator:
 
         # Format the position string
         return f"{sign_deg}° {sign_abbrev} {lon_min:02d}' {lon_sec:02d}\""
-        
+
     def get_planet_positions(self, dt):
         """
         Get positions of all planets at the given datetime.
@@ -151,7 +153,7 @@ class PlanetPositionCalculator:
 
         # Get planetary positions
         planets_data = chart_data.get_planets_data_from_chart(chart)
-        houses_data = chart_data.get_houses_data_from_chart(chart)
+        # houses_data = chart_data.get_houses_data_from_chart(chart)
 
         # Create DataFrame
         planet_rows = []
@@ -162,7 +164,7 @@ class PlanetPositionCalculator:
 
         # Create a map for quick lookup
         planet_map = {}
-        for planet in planets_
+        for planet in planets_data:
             # Map North Node to Rahu and South Node to Ketu explicitly
             display_name = None
             if planet.Object == "Rahu" or planet.Object == "North Node":
@@ -181,7 +183,7 @@ class PlanetPositionCalculator:
                 continue
 
             planet = planet_map[planet_name]
-            obj_name = planet.Object
+            # obj_name = planet.Object
 
             # Format position in degrees, minutes, seconds format
             position_str = self.format_position(planet)
