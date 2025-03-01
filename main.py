@@ -2,6 +2,8 @@ import sys
 import os
 import psutil
 import subprocess
+import logging
+import traceback
 from datetime import datetime, timedelta
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QLineEdit,
@@ -12,6 +14,32 @@ from PyQt5.QtCore import Qt, QDate, QTime, QThread, pyqtSignal
 
 from kp_data_generator import KPDataGenerator
 from excel_exporter import ExcelExporter
+
+
+def setup_logging():
+    """Configure logging for the application"""
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('kp_astrology.log')
+        ]
+    )
+    
+    # Set up global exception handling
+    sys.excepthook = handle_exception
+    
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """Handle uncaught exceptions by logging them"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        # Don't log keyboard interrupt (Ctrl+C)
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+        
+    logging.error("Uncaught exception", 
+                 exc_info=(exc_type, exc_value, exc_traceback))
 
 
 class GeneratorThread(QThread):
@@ -41,7 +69,7 @@ class GeneratorThread(QThread):
             }
 
             location_data = locations.get(self.location)
-            if not location_data:
+            if not location_
                 self.error_signal.emit(f"Location {self.location} not found!")
                 return
 
@@ -149,7 +177,10 @@ class GeneratorThread(QThread):
             self.progress_signal.emit(100, "Complete!")
 
         except Exception as e:
-            self.error_signal.emit(f"Error during data generation: {str(e)}")
+            error_msg = f"Error during data generation: {str(e)}"
+            logging.error(error_msg)
+            logging.error(traceback.format_exc())
+            self.error_signal.emit(error_msg)
 
 
 class KPAstrologyApp(QMainWindow):
@@ -446,123 +477,147 @@ class KPAstrologyApp(QMainWindow):
                 subprocess.call(['xdg-open', filepath])
             return True
         except Exception as e:
+            logging.error(f"Error opening Excel file: {str(e)}")
+            logging.error(traceback.format_exc())
             print(f"Error opening Excel file: {str(e)}")
             return False
 
     def generate_data(self):
-        # Get selected sheets
-        selected_sheets = [name for name, checkbox in self.sheet_checkboxes.items()
-                           if checkbox.isChecked()]
+        try:
+            # Get selected sheets
+            selected_sheets = [name for name, checkbox in self.sheet_checkboxes.items()
+                            if checkbox.isChecked()]
 
-        if not selected_sheets:
-            QMessageBox.warning(self, "No Sheets Selected",
-                                "Please select at least one sheet to generate.")
-            return
-
-        # Get selected aspects
-        selected_aspects = [aspect["angle"] for aspect in self.aspects
-                            if self.aspect_checkboxes[aspect["angle"]].isChecked()]
-
-        if not selected_aspects:
-            QMessageBox.warning(self, "No Aspects Selected",
-                                "Please select at least one aspect to calculate.")
-            return
-
-        # Get selected planets for aspects
-        selected_aspect_planets = [planet["name"] for planet in self.aspect_planets
-                                   if self.aspect_planets_checkboxes[planet["name"]].isChecked()]
-
-        if not selected_aspect_planets:
-            QMessageBox.warning(self, "No Planets Selected",
-                                "Please select at least one planet for aspect calculations.")
-            return
-
-        # Get location and datetime
-        location = self.location_combo.currentText()
-
-        # Get date and time separately and combine
-        qdate = self.date_picker.date()
-        qtime = self.time_picker.time()
-
-        # Convert QDate and QTime to Python datetime
-        start_dt = datetime(
-            qdate.year(),
-            qdate.month(),
-            qdate.day(),
-            qtime.hour(),
-            qtime.minute(),
-            qtime.second()
-        )
-
-        # Check if Excel file is already open
-        excel_file = "KP Panchang.xlsx"
-        if self.is_file_open(excel_file):
-            msgBox = QMessageBox()
-            msgBox.setIcon(QMessageBox.Warning)
-            msgBox.setText(f"The file '{excel_file}' is currently open.")
-            msgBox.setInformativeText("Please close it before generating a new file.")
-            msgBox.setWindowTitle("File Open")
-            msgBox.setStandardButtons(QMessageBox.Ok)
-            msgBox.exec_()
-            return
-
-        # Delete existing file if it exists
-        if os.path.exists(excel_file):
-            try:
-                os.remove(excel_file)
-            except Exception as e:
-                QMessageBox.warning(self, "File Error",
-                                    f"Could not remove existing file: {str(e)}")
+            if not selected_sheets:
+                logging.warning("No sheets selected by user")
+                QMessageBox.warning(self, "No Sheets Selected",
+                                    "Please select at least one sheet to generate.")
                 return
 
-        # Prepare yoga settings if Yogas sheet is selected
-        yoga_settings = None
-        if "Yogas" in selected_sheets:
-            # Calculate the start and end dates for yoga calculations
-            days_before = self.yoga_days_before.value()
-            days_after = self.yoga_days_after.value()
-            
-            yoga_start_date = start_dt - timedelta(days=days_before)
-            yoga_end_date = start_dt + timedelta(days=days_after)
-            
-            yoga_settings = {
-                "start_date": yoga_start_date,
-                "end_date": yoga_end_date
-            }
+            # Get selected aspects
+            selected_aspects = [aspect["angle"] for aspect in self.aspects
+                                if self.aspect_checkboxes[aspect["angle"]].isChecked()]
 
-        # Disable UI during generation
-        self.generate_btn.setEnabled(False)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("Initializing...")
+            if not selected_aspects:
+                logging.warning("No aspects selected by user")
+                QMessageBox.warning(self, "No Aspects Selected",
+                                    "Please select at least one aspect to calculate.")
+                return
 
-        # Start the generator thread
-        self.generator_thread = GeneratorThread(
-            location,
-            start_dt,
-            selected_sheets,
-            selected_aspects,
-            selected_aspect_planets,
-            yoga_settings
-        )
-        self.generator_thread.progress_signal.connect(self.update_progress)
-        self.generator_thread.finished_signal.connect(self.export_to_excel)
-        self.generator_thread.error_signal.connect(self.show_error)
-        self.generator_thread.start()
+            # Get selected planets for aspects
+            selected_aspect_planets = [planet["name"] for planet in self.aspect_planets
+                                    if self.aspect_planets_checkboxes[planet["name"]].isChecked()]
+
+            if not selected_aspect_planets:
+                logging.warning("No planets selected by user")
+                QMessageBox.warning(self, "No Planets Selected",
+                                    "Please select at least one planet for aspect calculations.")
+                return
+
+            # Get location and datetime
+            location = self.location_combo.currentText()
+            logging.info(f"Selected location: {location}")
+
+            # Get date and time separately and combine
+            qdate = self.date_picker.date()
+            qtime = self.time_picker.time()
+
+            # Convert QDate and QTime to Python datetime
+            start_dt = datetime(
+                qdate.year(),
+                qdate.month(),
+                qdate.day(),
+                qtime.hour(),
+                qtime.minute(),
+                qtime.second()
+            )
+            logging.info(f"Selected date and time: {start_dt}")
+
+            # Check if Excel file is already open
+            excel_file = "KP Panchang.xlsx"
+            if self.is_file_open(excel_file):
+                logging.warning(f"Excel file {excel_file} is already open")
+                msgBox = QMessageBox()
+                msgBox.setIcon(QMessageBox.Warning)
+                msgBox.setText(f"The file '{excel_file}' is currently open.")
+                msgBox.setInformativeText("Please close it before generating a new file.")
+                msgBox.setWindowTitle("File Open")
+                msgBox.setStandardButtons(QMessageBox.Ok)
+                msgBox.exec_()
+                return
+
+            # Delete existing file if it exists
+            if os.path.exists(excel_file):
+                try:
+                    os.remove(excel_file)
+                    logging.info(f"Removed existing file: {excel_file}")
+                except Exception as e:
+                    error_msg = f"Could not remove existing file: {str(e)}"
+                    logging.error(error_msg)
+                    logging.error(traceback.format_exc())
+                    QMessageBox.warning(self, "File Error", error_msg)
+                    return
+
+            # Prepare yoga settings if Yogas sheet is selected
+            yoga_settings = None
+            if "Yogas" in selected_sheets:
+                # Calculate the start and end dates for yoga calculations
+                days_before = self.yoga_days_before.value()
+                days_after = self.yoga_days_after.value()
+                
+                yoga_start_date = start_dt - timedelta(days=days_before)
+                yoga_end_date = start_dt + timedelta(days=days_after)
+                
+                yoga_settings = {
+                    "start_date": yoga_start_date,
+                    "end_date": yoga_end_date
+                }
+                logging.info(f"Yoga calculation range: {yoga_start_date} to {yoga_end_date}")
+
+            # Disable UI during generation
+            self.generate_btn.setEnabled(False)
+            self.progress_bar.setValue(0)
+            self.status_label.setText("Initializing...")
+
+            # Start the generator thread
+            logging.info("Starting generator thread")
+            self.generator_thread = GeneratorThread(
+                location,
+                start_dt,
+                selected_sheets,
+                selected_aspects,
+                selected_aspect_planets,
+                yoga_settings
+            )
+            self.generator_thread.progress_signal.connect(self.update_progress)
+            self.generator_thread.finished_signal.connect(self.export_to_excel)
+            self.generator_thread.error_signal.connect(self.show_error)
+            self.generator_thread.start()
+            
+        except Exception as e:
+            error_msg = f"Error in generate_ {str(e)}"
+            logging.error(error_msg)
+            logging.error(traceback.format_exc())
+            self.show_error(error_msg)
+            self.generate_btn.setEnabled(True)
 
     def update_progress(self, value, status):
         self.progress_bar.setValue(value)
         self.status_label.setText(status)
+        logging.debug(f"Progress update: {value}% - {status}")
 
     def export_to_excel(self, results):
         try:
             # Create filename
             filename = "KP Panchang.xlsx"
+            logging.info(f"Exporting data to {filename}")
 
             self.status_label.setText("Exporting to Excel...")
 
             # Export to Excel
             exporter = ExcelExporter()
             exporter.export_to_excel(results, filename)
+            logging.info("Excel export completed successfully")
 
             self.status_label.setText("Export complete!")
 
@@ -571,24 +626,36 @@ class KPAstrologyApp(QMainWindow):
                                     f"Data has been exported to {filename}")
 
             # Automatically open the Excel file
-            self.open_excel_file(filename)
+            if self.open_excel_file(filename):
+                logging.info(f"Successfully opened {filename}")
+            else:
+                logging.warning(f"Failed to open {filename}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Export Error",
-                                 f"Failed to export to Excel: {str(e)}")
+            error_msg = f"Failed to export to Excel: {str(e)}"
+            logging.error(error_msg)
+            logging.error(traceback.format_exc())
+            QMessageBox.critical(self, "Export Error", error_msg)
         finally:
             # Re-enable UI
             self.generate_btn.setEnabled(True)
             self.status_label.setText("Ready")
 
     def show_error(self, error_message):
+        logging.error(f"Application error: {error_message}")
         QMessageBox.critical(self, "Error", error_message)
         self.generate_btn.setEnabled(True)
         self.status_label.setText("Error occurred")
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = KPAstrologyApp()
-    window.show()
-    sys.exit(app.exec_())
+    setup_logging()
+    logging.info("Starting KP Astrology application")
+    try:
+        app = QApplication(sys.argv)
+        window = KPAstrologyApp()
+        window.show()
+        sys.exit(app.exec_())
+    except Exception as e:
+        logging.critical(f"Fatal application error: {str(e)}")
+        logging.critical(traceback.format_exc())
