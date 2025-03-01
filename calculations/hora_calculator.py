@@ -2,12 +2,13 @@ import pytz
 from datetime import datetime, timedelta
 import ephem
 
+
 class HoraCalculator:
     """
     Class for calculating hora (planetary hour) timings.
     In Vedic astrology, each day is divided into 24 horas, each ruled by a different planet.
     """
-    
+
     def __init__(self, latitude, longitude, timezone):
         """
         Initialize with location information.
@@ -25,8 +26,9 @@ class HoraCalculator:
         self.longitude = longitude
         self.timezone = timezone
         self.tz = pytz.timezone(timezone)
-        
-    def _get_hora_rulers_for_day(self, day_of_week):
+
+    @staticmethod
+    def _get_hora_rulers_for_day(day_of_week):
         """Get the correct sequence of hora rulers starting at sunrise for a given day"""
         hora_rulers = {
             "Sunday": ["Sun", "Venus", "Mercury", "Moon", "Saturn", "Jupiter", "Mars"],
@@ -39,7 +41,7 @@ class HoraCalculator:
         }
 
         return hora_rulers.get(day_of_week, [])
-    
+
     def get_sunrise_with_ephem(self, date, latitude=None, longitude=None):
         """
         Calculate sunrise and sunset using the ephem library.
@@ -63,7 +65,7 @@ class HoraCalculator:
             latitude = self.latitude
         if longitude is None:
             longitude = self.longitude
-            
+
         # Create observer at the specified location
         observer = ephem.Observer()
         observer.lat = str(latitude)
@@ -89,7 +91,7 @@ class HoraCalculator:
             'sunrise': sunrise_utc,  # UTC time without timezone info
             'sunset': sunset_utc  # UTC time without timezone info
         }
-    
+
     def get_hora_timings(self, start_dt, end_dt):
         """
         Get accurate Hora timings based on sunrise/sunset for the given date range.
@@ -108,7 +110,7 @@ class HoraCalculator:
             DataFrame with hora timing information
         """
         import pandas as pd
-        
+
         # Ensure datetimes are timezone aware
         if start_dt.tzinfo is None:
             start_dt = self.tz.localize(start_dt)

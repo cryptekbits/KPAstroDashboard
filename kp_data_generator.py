@@ -148,8 +148,7 @@ class KPDataGenerator:
         -----------
         chart : VedicHoroscopeData
             The chart data object
-        planets_data : pandas.DataFrame
-            DataFrame with planet positions
+        planets_data : pandas.DataFrame with planet positions
             
         Returns:
         --------

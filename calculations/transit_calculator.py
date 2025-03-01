@@ -3,12 +3,14 @@ import pytz
 import pandas as pd
 from aspect_calculator import AspectCalculator
 
+
 class TransitCalculator:
     """
     Class for calculating planetary transits and transitions.
     """
-    
-    def __init__(self, latitude, longitude, timezone, position_calculator, ayanamsa="Krishnamurti", house_system="Placidus"):
+
+    def __init__(self, latitude, longitude, timezone, position_calculator, ayanamsa="Krishnamurti",
+                 house_system="Placidus"):
         """
         Initialize with location information.
         
@@ -34,10 +36,10 @@ class TransitCalculator:
         self.ayanamsa = ayanamsa
         self.house_system = house_system
         self.tz = pytz.timezone(timezone)
-        
+
         # Initialize aspect calculator for finding aspects during transits
         self.aspect_calculator = AspectCalculator()
-        
+
     def get_planet_transitions(self, planet_name, start_dt, end_dt, check_interval_minutes=1):
         """
         Track transitions in a planet's position parameters over time.
@@ -59,6 +61,7 @@ class TransitCalculator:
             DataFrame with transition data
         """
         # Create mapping function to handle node aliases
+        global internal_planet_name
         if planet_name == "Rahu":
             # We need to check for both possible names
             def planet_match(p):
@@ -97,7 +100,7 @@ class TransitCalculator:
 
         # Find the planet we want
         last_planet_data = None
-        for planet in planets_
+        for planet in planets_data:
             if planet_match(planet):  # Use our match function
                 last_planet_data = planet
                 break
@@ -126,7 +129,7 @@ class TransitCalculator:
 
             # Find our planet
             current_planet_data = None
-            for planet in planets_
+            for planet in planets_data:
                 if planet_match(planet):  # Use our match function
                     current_planet_data = planet
                     break
@@ -140,7 +143,6 @@ class TransitCalculator:
             )
 
             # Filter events relevant to this planet
-            planet_display_name = planet_name
             if planet_name == "Rahu":
                 planet_short_name = "Rahu"
                 relevant_events = [e for e in current_events if planet_short_name in e and "entered" not in e]
@@ -222,7 +224,6 @@ class TransitCalculator:
             )
 
             # Filter events relevant to this planet
-            planet_display_name = planet_name
             if planet_name == "Rahu":
                 planet_short_name = "Rahu"
                 relevant_events = [e for e in final_events if planet_short_name in e and "entered" not in e]
