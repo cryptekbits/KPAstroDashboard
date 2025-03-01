@@ -1,11 +1,13 @@
 from .base_yoga import BaseYoga
 
+
 class NegativeYogas(BaseYoga):
     def __init__(self):
         super().__init__()
-        
-    def check_vish_yoga(self, chart, planets_data):
-        """Check for Vish Yoga (Malefics in 6, 8, 12 houses from Moon)"""
+
+    @staticmethod
+    def check_vish_yoga(chart, planets_data):
+        """Check for Vish Yoga (Malefic in 6, 8, 12 houses from Moon)"""
         moon_house = None
         malefic_houses = []
 
@@ -21,23 +23,25 @@ class NegativeYogas(BaseYoga):
             return any(house in vish_houses for house in malefic_houses)
 
         return False
-        
-    def check_angarak_yoga(self, chart, planets_data):
+
+    @staticmethod
+    def check_angarak_yoga(chart, planets_data):
         """Check for Angarak Yoga - Mars in 1st, 4th, 7th, 8th, or 12th house"""
         for planet in planets_data:
             if planet.Object == "Mars" and planet.HouseNr in [1, 4, 7, 8, 12]:
                 return True
         return False
-        
+
     def check_guru_chandala_yoga(self, chart, planets_data):
         """Check for Guru Chandala Yoga - Rahu and Jupiter conjunction"""
         return (self._are_specific_planets_conjunct("Jupiter", "Rahu", planets_data) or
                 self._are_specific_planets_conjunct("Jupiter", "North Node", planets_data))
-                
-    def check_graha_yuddha(self, chart, planets_data):
+
+    @staticmethod
+    def check_graha_yuddha(chart, planets_data):
         """Check for Graha Yuddha (Planetary War) - Two planets in close conjunction within 1 degree"""
         yuddha_yogas = []
-        
+
         for i, planet1 in enumerate(planets_data):
             if planet1.Object not in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
                 continue
@@ -53,9 +57,9 @@ class NegativeYogas(BaseYoga):
 
                 if angle < 1:
                     yuddha_yogas.append(f"Graha Yuddha ({planet1.Object}-{planet2.Object})")
-                    
+
         return yuddha_yogas
-        
+
     def check_kemadruma_yoga(self, chart, planets_data):
         """
         Check for Kemadruma Yoga - Moon with no planets in 2nd, 12th, 
@@ -67,7 +71,7 @@ class NegativeYogas(BaseYoga):
                 moon_data = planet
                 break
 
-        if not moon_
+        if not moon_data:
             return False
 
         # Find Moon's house
@@ -100,25 +104,25 @@ class NegativeYogas(BaseYoga):
                 break
 
         return not has_supporting_planet
-        
+
     def get_all_negative_yogas(self, chart, planets_data):
         """Get all negative yogas present in the chart"""
         yogas = []
-        
+
         if self.check_vish_yoga(chart, planets_data):
             yogas.append("Vish Yoga")
-            
+
         if self.check_angarak_yoga(chart, planets_data):
             yogas.append("Angarak Yoga")
-            
+
         if self.check_guru_chandala_yoga(chart, planets_data):
             yogas.append("Guru Chandala Yoga")
-            
+
         graha_yuddha = self.check_graha_yuddha(chart, planets_data)
         if graha_yuddha:
             yogas.extend(graha_yuddha)
-            
+
         if self.check_kemadruma_yoga(chart, planets_data):
             yogas.append("Kemadruma Yoga")
-            
+
         return yogas

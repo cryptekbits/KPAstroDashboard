@@ -115,7 +115,7 @@ class PositiveYogas(BaseYoga):
                     lord_of_sign = sign_lords[planet.Rasi]
 
                     # Check if lord is exalted or in a good house
-                    for other_planet in planets_
+                    for other_planet in planets_data:
                         if other_planet.Object == lord_of_sign:
                             # If lord is in a kendra (1, 4, 7, 10) or trikona (1, 5, 9) house
                             good_houses = [1, 4, 5, 7, 9, 10]
@@ -183,7 +183,7 @@ class PositiveYogas(BaseYoga):
         else:
             # Original code for object-based planets_data
             # Check each planet
-            for planet in planets_
+            for planet in planets_data:
                 if planet.Object in own_signs:
                     # Check if planet is in own sign or exalted
                     in_own_sign = planet.Rasi in own_signs[planet.Object]
@@ -236,7 +236,7 @@ class PositiveYogas(BaseYoga):
                     active_yogas.append("Guru-Mangala Yoga")
                     break
         else:
-            for planet in planets_
+            for planet in planets_data:
                 if planet.Object == "Jupiter" and planet.HouseNr in [2, 5, 11]:
                     active_yogas.append("Guru-Mangala Yoga")
                     break
@@ -279,7 +279,7 @@ class PositiveYogas(BaseYoga):
                 elif planet['Object'] == "Jupiter":
                     jupiter_pos = planet['LonDecDeg']
         else:
-            for planet in planets_
+            for planet in planets_data:
                 if planet.Object == "Moon":
                     moon_pos = planet.LonDecDeg
                 elif planet.Object == "Jupiter":
@@ -316,7 +316,7 @@ class PositiveYogas(BaseYoga):
                         active_yogas.append("Amala Yoga")
                         break
             else:
-                for planet in planets_
+                for planet in planets_data:
                     if (planet.Object == "Jupiter" or planet.Object == "Venus") and \
                             self._is_planet_aspecting_house(planet, 10, planets_data):
                         active_yogas.append("Amala Yoga")
