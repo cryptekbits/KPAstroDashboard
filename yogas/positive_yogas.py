@@ -20,7 +20,7 @@ class PositiveYogas(BaseYoga):
                     mercury_sign = planet['Rasi']
         else:
             # Original code for object-based planets_data
-            for planet in planets_
+            for planet in planets_data:
                 if planet.Object == "Sun":
                     sun_sign = planet.Rasi
                 elif planet.Object == "Mercury":
@@ -43,7 +43,7 @@ class PositiveYogas(BaseYoga):
                     jupiter_pos = planet['LonDecDeg']
         else:
             # Original code for object-based planets_data
-            for planet in planets_
+            for planet in planets_data:
                 if planet.Object == "Moon":
                     moon_pos = planet.LonDecDeg
                 elif planet.Object == "Jupiter":
@@ -108,7 +108,7 @@ class PositiveYogas(BaseYoga):
         else:
             # Original code for object-based planets_data
             # Check if any planet is in debilitation and if its lord is well-placed
-            for planet in planets_
+            for planet in planets_data:
                 name = planet.Object
                 if name in debilitation and planet.Rasi == debilitation[name]:
                     # Planet is debilitated
@@ -302,7 +302,7 @@ class PositiveYogas(BaseYoga):
                     sun_in_10th = True
                     break
         else:
-            for planet in planets_
+            for planet in planets_data:
                 if planet.Object == "Sun" and planet.HouseNr == 10:
                     sun_in_10th = True
                     break
