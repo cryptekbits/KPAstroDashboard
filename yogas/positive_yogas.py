@@ -1,15 +1,17 @@
 from .base_yoga import BaseYoga
 
+
 class PositiveYogas(BaseYoga):
     def __init__(self):
         super().__init__()
 
-    def check_budha_aditya(self, chart, planets_data):
+    @staticmethod
+    def check_budha_aditya(chart, planets_data):
         """Check for Budha-Aditya Yoga (Mercury and Sun in same sign)"""
         sun_sign = None
         mercury_sign = None
 
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Sun":
                 sun_sign = planet.Rasi
             elif planet.Object == "Mercury":
@@ -17,12 +19,13 @@ class PositiveYogas(BaseYoga):
 
         return sun_sign and mercury_sign and sun_sign == mercury_sign
 
-    def check_gaja_kesari(self, chart, planets_data):
+    @staticmethod
+    def check_gaja_kesari(chart, planets_data):
         """Check for Gaja-Kesari Yoga (Jupiter and Moon in quadrant from each other)"""
         moon_pos = None
         jupiter_pos = None
 
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Moon":
                 moon_pos = planet.LonDecDeg
             elif planet.Object == "Jupiter":
@@ -38,7 +41,8 @@ class PositiveYogas(BaseYoga):
 
         return False
 
-    def check_neech_bhanga(self, chart, planets_data):
+    @staticmethod
+    def check_neech_bhanga(chart, planets_data):
         """Check for Neech Bhanga Raja Yoga (Debilitated planet with cancellation)"""
         # Debilitation signs
         debilitation = {
@@ -68,14 +72,14 @@ class PositiveYogas(BaseYoga):
         }
 
         # Check if any planet is in debilitation and if its lord is well-placed
-        for planet in planets_
+        for planet in planets_data:
             name = planet.Object
             if name in debilitation and planet.Rasi == debilitation[name]:
                 # Planet is debilitated
                 lord_of_sign = sign_lords[planet.Rasi]
 
                 # Check if lord is exalted or in a good house
-                for other_planet in planets_
+                for other_planet in planets_data:
                     if other_planet.Object == lord_of_sign:
                         # If lord is in a kendra (1, 4, 7, 10) or trikona (1, 5, 9) house
                         good_houses = [1, 4, 5, 7, 9, 10]
@@ -84,7 +88,8 @@ class PositiveYogas(BaseYoga):
 
         return False
 
-    def check_pancha_mahapurusha_yoga(self, chart, planets_data):
+    @staticmethod
+    def check_pancha_mahapurusha_yoga(chart, planets_data):
         """
         Check for Pancha Mahapurusha Yogas (five great person yogas).
 
@@ -117,7 +122,7 @@ class PositiveYogas(BaseYoga):
         kendras = [1, 4, 7, 10]
 
         # Check each planet
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object in own_signs:
                 # Check if planet is in own sign or exalted
                 in_own_sign = planet.Rasi in own_signs[planet.Object]
@@ -200,7 +205,7 @@ class PositiveYogas(BaseYoga):
         moon_pos = None
         jupiter_pos = None
 
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Moon":
                 moon_pos = planet.LonDecDeg
             elif planet.Object == "Jupiter":
@@ -217,14 +222,14 @@ class PositiveYogas(BaseYoga):
 
         # 3. Sun in 10th house with Jupiter or Venus aspect
         sun_in_10th = False
-        for planet in planets_
+        for planet in planets_data:
             if planet.Object == "Sun" and planet.HouseNr == 10:
                 sun_in_10th = True
                 break
 
         if sun_in_10th:
             # Check for Jupiter or Venus aspect to the 10th house
-            for planet in planets_
+            for planet in planets_data:
                 if (planet.Object == "Jupiter" or planet.Object == "Venus") and \
                         self._is_planet_aspecting_house(planet, 10, planets_data):
                     active_yogas.append("Amala Yoga")
@@ -235,20 +240,20 @@ class PositiveYogas(BaseYoga):
     def get_all_positive_yogas(self, chart, planets_data):
         """Get all positive yogas present in the chart"""
         yogas = []
-        
+
         # Individual yoga checks
         if self.check_budha_aditya(chart, planets_data):
             yogas.append("Budha-Aditya Yoga")
-            
+
         if self.check_gaja_kesari(chart, planets_data):
             yogas.append("Gaja-Kesari Yoga")
-            
+
         if self.check_neech_bhanga(chart, planets_data):
             yogas.append("Neech Bhanga Raja Yoga")
-            
+
         # Collection yoga checks
         yogas.extend(self.check_pancha_mahapurusha_yoga(chart, planets_data))
         yogas.extend(self.check_dhana_yogas(chart, planets_data))
         yogas.extend(self.check_raja_yogas(chart, planets_data))
-        
+
         return yogas
