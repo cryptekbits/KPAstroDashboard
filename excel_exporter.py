@@ -9,7 +9,8 @@ class ExcelExporter:
         """Initialize the Excel exporter."""
         pass
 
-    def export_to_excel(self, data_dict, filename):
+    @staticmethod
+    def export_to_excel(data_dict, filename):
         """
         Export the provided data to an Excel file with multiple sheets.
 
@@ -228,7 +229,7 @@ class ExcelExporter:
                 worksheet.set_column('F:I', 15)  # Lord columns
                 worksheet.set_column('J:J', 40)  # Aspects column (if present)
 
-            # Add autofilter
+            # Add auto filter
             if len(df) > 0:
                 worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
 
@@ -243,7 +244,8 @@ class ExcelExporter:
         return filename
 
     # In the ExcelExporter class, add a method to determine if a yoga is positive or negative
-    def is_positive_yoga(self, yoga_name):
+    @staticmethod
+    def is_positive_yoga(yoga_name):
         """Determine if a yoga is considered positive"""
         negative_yogas = [
             "Vish Yoga", "Angarak Yoga", "Guru Chandala Yoga",

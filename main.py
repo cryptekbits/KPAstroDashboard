@@ -69,7 +69,7 @@ class GeneratorThread(QThread):
             }
 
             location_data = locations.get(self.location)
-            if not location_
+            if not location_data:
                 self.error_signal.emit(f"Location {self.location} not found!")
                 return
 
