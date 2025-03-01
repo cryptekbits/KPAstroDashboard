@@ -3,8 +3,6 @@ import os
 import psutil
 import subprocess
 from datetime import datetime, timedelta
-import pandas as pd
-import pytz
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QLineEdit,
                              QDateEdit, QTimeEdit, QCheckBox, QGroupBox, QComboBox,
@@ -43,7 +41,7 @@ class GeneratorThread(QThread):
             }
 
             location_data = locations.get(self.location)
-            if not location_
+            if not location_data:
                 self.error_signal.emit(f"Location {self.location} not found!")
                 return
 
@@ -157,6 +155,20 @@ class GeneratorThread(QThread):
 class KPAstrologyApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.aspects = [
+            {"angle": 0, "name": "Conjunction", "symbol": "☌", "default": True},
+            {"angle": 30, "name": "Semi-Sextile", "symbol": "⚺", "default": False},
+            {"angle": 60, "name": "Sextile", "symbol": "⚹", "default": False},
+            {"angle": 90, "name": "Square", "symbol": "□", "default": True},
+            {"angle": 120, "name": "Trine", "symbol": "△", "default": False},
+            {"angle": 150, "name": "Quincunx", "symbol": "⚻", "default": False},
+            {"angle": 180, "name": "Opposition", "symbol": "☍", "default": True}
+        ]
+        self.sheet_names = [
+            "Planet Positions", "Hora Timing", "Moon", "Ascendant",
+            "Sun", "Mercury", "Venus", "Mars", "Jupiter",
+            "Saturn", "Rahu", "Ketu", "Uranus", "Neptune", "Yogas"  # Added Yogas
+        ]
         self.initUI()
 
     def initUI(self):
@@ -252,11 +264,6 @@ class KPAstrologyApp(QMainWindow):
         sheets_group.setLayout(sheets_layout)
 
         self.sheet_checkboxes = {}
-        self.sheet_names = [
-            "Planet Positions", "Hora Timing", "Moon", "Ascendant",
-            "Sun", "Mercury", "Venus", "Mars", "Jupiter",
-            "Saturn", "Rahu", "Ketu", "Uranus", "Neptune", "Yogas"  # Added Yogas
-        ]
 
         # Create a grid layout for checkboxes (2 columns)
         grid_layout = QGridLayout()
@@ -285,15 +292,6 @@ class KPAstrologyApp(QMainWindow):
         self.aspect_checkboxes = {}
 
         # Define aspects with their symbols and names
-        self.aspects = [
-            {"angle": 0, "name": "Conjunction", "symbol": "☌", "default": True},
-            {"angle": 30, "name": "Semi-Sextile", "symbol": "⚺", "default": False},
-            {"angle": 60, "name": "Sextile", "symbol": "⚹", "default": False},
-            {"angle": 90, "name": "Square", "symbol": "□", "default": True},
-            {"angle": 120, "name": "Trine", "symbol": "△", "default": False},
-            {"angle": 150, "name": "Quincunx", "symbol": "⚻", "default": False},
-            {"angle": 180, "name": "Opposition", "symbol": "☍", "default": True}
-        ]
 
         # Create a grid layout for aspect checkboxes (3 columns)
         aspect_grid = QGridLayout()
@@ -421,7 +419,8 @@ class KPAstrologyApp(QMainWindow):
         for checkbox in self.aspect_checkboxes.values():
             checkbox.setChecked(False)
 
-    def is_file_open(self, filepath):
+    @staticmethod
+    def is_file_open(filepath):
         """Check if a file is currently open by another process"""
         if not os.path.exists(filepath):
             return False
@@ -435,7 +434,8 @@ class KPAstrologyApp(QMainWindow):
                 pass
         return False
 
-    def open_excel_file(self, filepath):
+    @staticmethod
+    def open_excel_file(filepath):
         """Open the Excel file using the default application"""
         try:
             if sys.platform == 'win32':
@@ -494,7 +494,7 @@ class KPAstrologyApp(QMainWindow):
             qtime.second()
         )
 
-        # Check if excel file is already open
+        # Check if Excel file is already open
         excel_file = "KP Panchang.xlsx"
         if self.is_file_open(excel_file):
             msgBox = QMessageBox()
