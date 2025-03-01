@@ -5,49 +5,29 @@ class PositiveYogas(BaseYoga):
     def __init__(self):
         super().__init__()
 
-    @staticmethod
-    def check_budha_aditya(chart, planets_data):
+    def check_budha_aditya(self, chart, planets_data):
         """Check for Budha-Aditya Yoga (Mercury and Sun in same sign)"""
         sun_sign = None
         mercury_sign = None
 
-        # Check if planets_data is a dataframe
-        if hasattr(planets_data, 'iterrows'):
-            for _, planet in planets_data.iterrows():
-                if planet['Object'] == "Sun":
-                    sun_sign = planet['Rasi']
-                elif planet['Object'] == "Mercury":
-                    mercury_sign = planet['Rasi']
-        else:
-            # Original code for object-based planets_data
-            for planet in planets_data:
-                if planet.Object == "Sun":
-                    sun_sign = planet.Rasi
-                elif planet.Object == "Mercury":
-                    mercury_sign = planet.Rasi
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] == "Sun":
+                sun_sign = planet['Rasi']
+            elif planet['Object'] == "Mercury":
+                mercury_sign = planet['Rasi']
 
         return sun_sign and mercury_sign and sun_sign == mercury_sign
 
-    @staticmethod
-    def check_gaja_kesari(chart, planets_data):
+    def check_gaja_kesari(self, chart, planets_data):
         """Check for Gaja-Kesari Yoga (Jupiter and Moon in quadrant from each other)"""
         moon_pos = None
         jupiter_pos = None
 
-        # Check if planets_data is a dataframe
-        if hasattr(planets_data, 'iterrows'):
-            for _, planet in planets_data.iterrows():
-                if planet['Object'] == "Moon":
-                    moon_pos = planet['LonDecDeg']
-                elif planet['Object'] == "Jupiter":
-                    jupiter_pos = planet['LonDecDeg']
-        else:
-            # Original code for object-based planets_data
-            for planet in planets_data:
-                if planet.Object == "Moon":
-                    moon_pos = planet.LonDecDeg
-                elif planet.Object == "Jupiter":
-                    jupiter_pos = planet.LonDecDeg
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] == "Moon":
+                moon_pos = planet['LonDecDeg']
+            elif planet['Object'] == "Jupiter":
+                jupiter_pos = planet['LonDecDeg']
 
         if moon_pos is not None and jupiter_pos is not None:
             angle = abs(moon_pos - jupiter_pos)
@@ -59,8 +39,7 @@ class PositiveYogas(BaseYoga):
 
         return False
 
-    @staticmethod
-    def check_neech_bhanga(chart, planets_data):
+    def check_neech_bhanga(self, chart, planets_data):
         """Check for Neech Bhanga Raja Yoga (Debilitated planet with cancellation)"""
         # Debilitation signs
         debilitation = {
@@ -89,43 +68,24 @@ class PositiveYogas(BaseYoga):
             "Pisces": "Jupiter"
         }
 
-        # Check if planets_data is a dataframe
-        if hasattr(planets_data, 'iterrows'):
-            # Check if any planet is in debilitation and if its lord is well-placed
-            for _, planet in planets_data.iterrows():
-                name = planet['Object']
-                if name in debilitation and planet['Rasi'] == debilitation[name]:
-                    # Planet is debilitated
-                    lord_of_sign = sign_lords[planet['Rasi']]
+        # Check if any planet is in debilitation and if its lord is well-placed
+        for planet in self._iter_planets(planets_data):
+            name = planet['Object']
+            if name in debilitation and planet['Rasi'] == debilitation[name]:
+                # Planet is debilitated
+                lord_of_sign = sign_lords[planet['Rasi']]
 
-                    # Check if lord is exalted or in a good house
-                    for _, other_planet in planets_data.iterrows():
-                        if other_planet['Object'] == lord_of_sign:
-                            # If lord is in a kendra (1, 4, 7, 10) or trikona (1, 5, 9) house
-                            good_houses = [1, 4, 5, 7, 9, 10]
-                            if other_planet['HouseNr'] in good_houses:
-                                return True
-        else:
-            # Original code for object-based planets_data
-            # Check if any planet is in debilitation and if its lord is well-placed
-            for planet in planets_data:
-                name = planet.Object
-                if name in debilitation and planet.Rasi == debilitation[name]:
-                    # Planet is debilitated
-                    lord_of_sign = sign_lords[planet.Rasi]
-
-                    # Check if lord is exalted or in a good house
-                    for other_planet in planets_data:
-                        if other_planet.Object == lord_of_sign:
-                            # If lord is in a kendra (1, 4, 7, 10) or trikona (1, 5, 9) house
-                            good_houses = [1, 4, 5, 7, 9, 10]
-                            if other_planet.HouseNr in good_houses:
-                                return True
+                # Check if lord is exalted or in a good house
+                for other_planet in self._iter_planets(planets_data):
+                    if other_planet['Object'] == lord_of_sign:
+                        # If lord is in a kendra (1, 4, 7, 10) or trikona (1, 5, 9) house
+                        good_houses = [1, 4, 5, 7, 9, 10]
+                        if other_planet['HouseNr'] in good_houses:
+                            return True
 
         return False
 
-    @staticmethod
-    def check_pancha_mahapurusha_yoga(chart, planets_data):
+    def check_pancha_mahapurusha_yoga(self, chart, planets_data):
         """
         Check for Pancha Mahapurusha Yogas (five great person yogas).
 
@@ -157,52 +117,27 @@ class PositiveYogas(BaseYoga):
         # Kendra houses (1, 4, 7, 10)
         kendras = [1, 4, 7, 10]
 
-        # Check if planets_data is a dataframe
-        if hasattr(planets_data, 'iterrows'):
-            # Check each planet
-            for _, planet in planets_data.iterrows():
-                if planet['Object'] in own_signs:
-                    # Check if planet is in own sign or exalted
-                    in_own_sign = planet['Rasi'] in own_signs[planet['Object']]
-                    in_exalted = planet['Rasi'] == exalted_signs[planet['Object']]
+        # Check each planet
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] in own_signs:
+                # Check if planet is in own sign or exalted
+                in_own_sign = planet['Rasi'] in own_signs[planet['Object']]
+                in_exalted = planet['Rasi'] == exalted_signs[planet['Object']]
 
-                    # Check if in kendra house
-                    in_kendra = planet['HouseNr'] in kendras
+                # Check if in kendra house
+                in_kendra = planet['HouseNr'] in kendras
 
-                    if (in_own_sign or in_exalted) and in_kendra:
-                        if planet['Object'] == "Mars":
-                            active_yogas.append("Ruchaka Yoga")
-                        elif planet['Object'] == "Mercury":
-                            active_yogas.append("Bhadra Yoga")
-                        elif planet['Object'] == "Jupiter":
-                            active_yogas.append("Hamsa Yoga")
-                        elif planet['Object'] == "Venus":
-                            active_yogas.append("Malavya Yoga")
-                        elif planet['Object'] == "Saturn":
-                            active_yogas.append("Sasa Yoga")
-        else:
-            # Original code for object-based planets_data
-            # Check each planet
-            for planet in planets_data:
-                if planet.Object in own_signs:
-                    # Check if planet is in own sign or exalted
-                    in_own_sign = planet.Rasi in own_signs[planet.Object]
-                    in_exalted = planet.Rasi == exalted_signs[planet.Object]
-
-                    # Check if in kendra house
-                    in_kendra = planet.HouseNr in kendras
-
-                    if (in_own_sign or in_exalted) and in_kendra:
-                        if planet.Object == "Mars":
-                            active_yogas.append("Ruchaka Yoga")
-                        elif planet.Object == "Mercury":
-                            active_yogas.append("Bhadra Yoga")
-                        elif planet.Object == "Jupiter":
-                            active_yogas.append("Hamsa Yoga")
-                        elif planet.Object == "Venus":
-                            active_yogas.append("Malavya Yoga")
-                        elif planet.Object == "Saturn":
-                            active_yogas.append("Sasa Yoga")
+                if (in_own_sign or in_exalted) and in_kendra:
+                    if planet['Object'] == "Mars":
+                        active_yogas.append("Ruchaka Yoga")
+                    elif planet['Object'] == "Mercury":
+                        active_yogas.append("Bhadra Yoga")
+                    elif planet['Object'] == "Jupiter":
+                        active_yogas.append("Hamsa Yoga")
+                    elif planet['Object'] == "Venus":
+                        active_yogas.append("Malavya Yoga")
+                    elif planet['Object'] == "Saturn":
+                        active_yogas.append("Sasa Yoga")
 
         return active_yogas
 
@@ -230,16 +165,10 @@ class PositiveYogas(BaseYoga):
             active_yogas.append("Dhana Yoga")
 
         # 3. Jupiter in 2nd or 5th or 11th house
-        if hasattr(planets_data, 'iterrows'):
-            for _, planet in planets_data.iterrows():
-                if planet['Object'] == "Jupiter" and planet['HouseNr'] in [2, 5, 11]:
-                    active_yogas.append("Guru-Mangala Yoga")
-                    break
-        else:
-            for planet in planets_data:
-                if planet.Object == "Jupiter" and planet.HouseNr in [2, 5, 11]:
-                    active_yogas.append("Guru-Mangala Yoga")
-                    break
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] == "Jupiter" and planet['HouseNr'] in [2, 5, 11]:
+                active_yogas.append("Guru-Mangala Yoga")
+                break
 
         # 4. Venus and Jupiter conjunction
         if self._are_specific_planets_conjunct("Venus", "Jupiter", planets_data):
@@ -272,18 +201,11 @@ class PositiveYogas(BaseYoga):
         moon_pos = None
         jupiter_pos = None
 
-        if hasattr(planets_data, 'iterrows'):
-            for _, planet in planets_data.iterrows():
-                if planet['Object'] == "Moon":
-                    moon_pos = planet['LonDecDeg']
-                elif planet['Object'] == "Jupiter":
-                    jupiter_pos = planet['LonDecDeg']
-        else:
-            for planet in planets_data:
-                if planet.Object == "Moon":
-                    moon_pos = planet.LonDecDeg
-                elif planet.Object == "Jupiter":
-                    jupiter_pos = planet.LonDecDeg
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] == "Moon":
+                moon_pos = planet['LonDecDeg']
+            elif planet['Object'] == "Jupiter":
+                jupiter_pos = planet['LonDecDeg']
 
         if moon_pos is not None and jupiter_pos is not None:
             angle = abs(moon_pos - jupiter_pos)
@@ -296,31 +218,18 @@ class PositiveYogas(BaseYoga):
 
         # 3. Sun in 10th house with Jupiter or Venus aspect
         sun_in_10th = False
-        if hasattr(planets_data, 'iterrows'):
-            for _, planet in planets_data.iterrows():
-                if planet['Object'] == "Sun" and planet['HouseNr'] == 10:
-                    sun_in_10th = True
-                    break
-        else:
-            for planet in planets_data:
-                if planet.Object == "Sun" and planet.HouseNr == 10:
-                    sun_in_10th = True
-                    break
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] == "Sun" and planet['HouseNr'] == 10:
+                sun_in_10th = True
+                break
 
         if sun_in_10th:
             # Check for Jupiter or Venus aspect to the 10th house
-            if hasattr(planets_data, 'iterrows'):
-                for _, planet in planets_data.iterrows():
-                    if (planet['Object'] == "Jupiter" or planet['Object'] == "Venus") and \
-                            self._is_planet_aspecting_house(planet, 10, planets_data):
-                        active_yogas.append("Amala Yoga")
-                        break
-            else:
-                for planet in planets_data:
-                    if (planet.Object == "Jupiter" or planet.Object == "Venus") and \
-                            self._is_planet_aspecting_house(planet, 10, planets_data):
-                        active_yogas.append("Amala Yoga")
-                        break
+            for planet in self._iter_planets(planets_data):
+                if (planet['Object'] == "Jupiter" or planet['Object'] == "Venus") and \
+                        self._is_planet_aspecting_house(planet, 10, planets_data):
+                    active_yogas.append("Amala Yoga")
+                    break
 
         return active_yogas
 

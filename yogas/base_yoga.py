@@ -3,6 +3,29 @@ class BaseYoga:
         """Initialize the base yoga class."""
         pass
 
+    def _iter_planets(self, planets_data):
+        """Yield planets with consistent interface from either DataFrame or object list"""
+        if hasattr(planets_data, 'iterrows'):  # DataFrame case
+            for _, row in planets_data.iterrows():
+                yield {
+                    'Object': row['Planet'],
+                    'Rasi': row['Sign'],
+                    'HouseNr': row['House'] if row['House'] != '-' else None,
+                    'LonDecDeg': row.get('LonDecDeg', 0),  # Ensure this column exists in position_calculator
+                    'isRetroGrade': row['Retrograde'] == 'Y',
+                    'Nakshatra': row.get('Nakshatra', '')
+                }
+        else:  # Object case
+            for planet in planets_data:
+                yield {
+                    'Object': planet.Object,
+                    'Rasi': planet.Rasi,
+                    'HouseNr': getattr(planet, 'HouseNr', None),
+                    'LonDecDeg': getattr(planet, 'LonDecDeg', 0),
+                    'isRetroGrade': getattr(planet, 'isRetroGrade', False),
+                    'Nakshatra': getattr(planet, 'Nakshatra', '')
+                }
+
     @staticmethod
     def _get_house_lord(house_num, planets_data):
         """Find the lord of a specific house"""

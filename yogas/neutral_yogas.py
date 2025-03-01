@@ -5,19 +5,18 @@ class NeutralYogas(BaseYoga):
     def __init__(self):
         super().__init__()
 
-    @staticmethod
-    def check_kala_sarpa_yoga(chart, planets_data):
+    def check_kala_sarpa_yoga(self, chart, planets_data):
         """
         Check for Kala Sarpa Yoga (all planets between Rahu and Ketu)
         """
         rahu_lon = None
         ketu_lon = None
 
-        for planet in planets_data:
-            if planet.Object == "North Node" or planet.Object == "Rahu":
-                rahu_lon = planet.LonDecDeg
-            elif planet.Object == "South Node" or planet.Object == "Ketu":
-                ketu_lon = planet.LonDecDeg
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] in ["North Node", "Rahu"]:
+                rahu_lon = planet['LonDecDeg']
+            elif planet['Object'] in ["South Node", "Ketu"]:
+                ketu_lon = planet['LonDecDeg']
 
         if rahu_lon is None or ketu_lon is None:
             return False
@@ -32,9 +31,9 @@ class NeutralYogas(BaseYoga):
 
         # Check if all planets are in this arc
         all_in_arc = True
-        for planet in planets_data:
-            if planet.Object in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
-                lon = planet.LonDecDeg
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] in ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]:
+                lon = planet['LonDecDeg']
                 if rahu_lon < ketu_lon and (lon < rahu_lon or lon > ketu_lon):
                     all_in_arc = False
                     break
@@ -44,8 +43,7 @@ class NeutralYogas(BaseYoga):
 
         return "Kala Sarpa Yoga" if all_in_arc else None
 
-    @staticmethod
-    def check_graha_malika_yoga(chart, planets_data):
+    def check_graha_malika_yoga(self, chart, planets_data):
         """
         Check for Graha Malika Yoga (chain of planets in consecutive houses)
         """
@@ -55,9 +53,9 @@ class NeutralYogas(BaseYoga):
         # Only use the main planets for this yoga
         main_planets = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]
 
-        for planet in planets_data:
-            if planet.Object in main_planets and planet.HouseNr:
-                houses_occupied[planet.HouseNr].append(planet.Object)
+        for planet in self._iter_planets(planets_data):
+            if planet['Object'] in main_planets and planet['HouseNr']:
+                houses_occupied[planet['HouseNr']].append(planet['Object'])
 
         # Check for consecutive houses with planets
         consecutive_count = 0

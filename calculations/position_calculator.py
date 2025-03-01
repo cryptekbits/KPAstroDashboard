@@ -201,7 +201,8 @@ class PlanetPositionCalculator:
                 "House": planet.HouseNr if planet.HouseNr else "-",
                 "Nakshatra": planet.Nakshatra,
                 "KP Pointer": kp_pointer,
-                "Retrograde": retrograde
+                "Retrograde": retrograde,
+                "LonDecDeg": planet.LonDecDeg
             })
 
         return pd.DataFrame(planet_rows)
