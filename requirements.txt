@@ -10,3 +10,4 @@ psutil>=5.8.0
 ephem>=4.2
 python-dateutil>=2.9.0.post0
 numpy>=2.0.2
+packaging>=23.2

@@ -17,6 +17,7 @@ The dashboard provides detailed astrological calculations with high precision fo
 - **Excel Export**: Clean data export to Excel for better readability and analysis
 - **Utility Functions**: Conversion utilities for degrees, minutes, seconds, dates and time calculations
 - **Swiss Ephemeris Integration**: Uses the Swiss Ephemeris for accurate planetary positions
+- **Automatic Updates**: The application checks for updates on startup and can download and install new versions automatically
 
 ## Technical Details
 

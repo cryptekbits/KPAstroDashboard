@@ -7,7 +7,7 @@ import logging
 import traceback
 import json
 from datetime import datetime
-from PyQt5.QtWidgets import QMainWindow, QTabWidget, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QTabWidget, QMessageBox, QAction, QMenu
 from PyQt5.QtCore import QThread
 
 from exporters.excel_exporter import ExcelExporter
@@ -15,6 +15,7 @@ from .generator_thread import GeneratorThread
 from .tabs.main_tab import MainTab
 from .tabs.config_tab import ConfigTab
 from .utils.ui_helpers import is_file_open, open_excel_file
+from .utils.updater import check_for_updates_on_startup
 
 
 class KPAstrologyApp(QMainWindow):
@@ -53,6 +54,34 @@ class KPAstrologyApp(QMainWindow):
         # Create and add the configuration tab
         config_tab = self.config_tab.setup_tab()
         tab_widget.addTab(config_tab, "Configuration")
+
+        # Create menu bar
+        self.create_menu_bar()
+
+    def create_menu_bar(self):
+        """Create the application menu bar."""
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu('File')
+        
+        # Exit action
+        exit_action = QAction('Exit', self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Help menu
+        help_menu = menubar.addMenu('Help')
+        
+        # Check for updates action
+        update_action = QAction('Check for Updates', self)
+        update_action.triggered.connect(self.check_for_updates)
+        help_menu.addAction(update_action)
+        
+        # About action
+        about_action = QAction('About', self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
 
     def update_main_tab_visibility(self):
         """Update the visibility of components in the main tab based on configuration settings."""
@@ -290,4 +319,21 @@ class KPAstrologyApp(QMainWindow):
         logging.error(f"Application error: {error_message}")
         QMessageBox.critical(self, "Error", error_message)
         self.main_tab.generate_btn.setEnabled(True)
-        self.main_tab.status_label.setText("Error occurred") 
+        self.main_tab.status_label.setText("Error occurred")
+
+    def check_for_updates(self):
+        """Manually check for updates."""
+        check_for_updates_on_startup(self)
+
+    def show_about_dialog(self):
+        """Show the about dialog."""
+        from version import VERSION, VERSION_NAME, BUILD_DATE
+        
+        about_text = f"""
+        <h2>KP Astrology Dashboard</h2>
+        <p>Version: {VERSION} ({VERSION_NAME})</p>
+        <p>Build Date: {BUILD_DATE}</p>
+        <p>A comprehensive tool for KP Astrology calculations and analysis.</p>
+        """
+        
+        QMessageBox.about(self, "About KP Astrology Dashboard", about_text) 
