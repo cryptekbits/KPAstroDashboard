@@ -1,3 +1,12 @@
+# <img src="resources/logo.png" width="500">
+
+![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
+[![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml)
+
+| Branch   | Status                                                                                                                                                                  |
+| :------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `master` | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) |
+
 # KP Astrology Dashboard
 
 A high-precision Krishnamurti Paddhati (KP) astrology calculator with convenient UI and Excel export functionality.
