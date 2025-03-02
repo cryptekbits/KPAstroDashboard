@@ -305,8 +305,23 @@ class MainTab:
                 self.sheet_checkboxes[sheet].setEnabled(config_settings["transit"]["enabled"])
                 if not config_settings["transit"]["enabled"]:
                     self.sheet_checkboxes[sheet].setChecked(False)
+                    
+        # 5. Individual planet visibility based on planet_pos configuration
+        if "planet_pos" in config_settings and "planets" in config_settings["planet_pos"]:
+            planet_config = config_settings["planet_pos"]["planets"]
+            for planet_name, enabled in planet_config.items():
+                if planet_name in self.sheet_checkboxes:
+                    # First reset the enabled state based on transit settings
+                    if planet_name in transit_sheets:
+                        is_transit_enabled = config_settings["transit"]["enabled"]
+                        self.sheet_checkboxes[planet_name].setEnabled(is_transit_enabled)
+                    
+                    # Then apply planet_pos configuration
+                    if not enabled and planet_name in self.sheet_checkboxes:
+                        self.sheet_checkboxes[planet_name].setEnabled(False)
+                        self.sheet_checkboxes[planet_name].setChecked(False)
         
-        # 5. Update aspect controls visibility
+        # 6. Update aspect controls visibility
         if "aspects" in config_settings:
             # Show/hide the entire aspect groups based on the main aspect toggle
             if self.aspect_group:
@@ -326,7 +341,7 @@ class MainTab:
                                 config_settings["aspects"]["enabled"] and enabled
                             )
         
-            # 6. Update aspect planet checkboxes based on configuration
+            # 7. Update aspect planet checkboxes based on configuration
             if "aspect_planets" in config_settings["aspects"]:
                 for planet_name, enabled in config_settings["aspects"]["aspect_planets"].items():
                     if planet_name in self.aspect_controls.aspect_planets_checkboxes:

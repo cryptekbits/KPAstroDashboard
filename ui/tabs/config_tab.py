@@ -163,6 +163,8 @@ class ConfigTab:
         max_col = 3
         for name, checkbox in planet_pos_columns.items():
             checkbox.setChecked(True)
+            # Connect each column checkbox to update main tab visibility
+            checkbox.toggled.connect(self.parent.update_main_tab_visibility)
             columns_layout.addWidget(checkbox, row, col)
             col += 1
             if col >= max_col:
@@ -196,6 +198,8 @@ class ConfigTab:
         max_col = 3
         for name, checkbox in planet_pos_planets.items():
             checkbox.setChecked(True)
+            # Connect each planet checkbox to update main tab visibility
+            checkbox.toggled.connect(self.parent.update_main_tab_visibility)
             planets_layout.addWidget(checkbox, row, col)
             col += 1
             if col >= max_col:
@@ -241,6 +245,8 @@ class ConfigTab:
         max_col = 3
         for name, checkbox in hora_columns.items():
             checkbox.setChecked(True)
+            # Connect each column checkbox to update main tab visibility
+            checkbox.toggled.connect(self.parent.update_main_tab_visibility)
             hora_columns_layout.addWidget(checkbox, row, col)
             col += 1
             if col >= max_col:
@@ -292,6 +298,8 @@ class ConfigTab:
         max_col = 3
         for name, checkbox in transit_columns.items():
             checkbox.setChecked(True)
+            # Connect each column checkbox to update main tab visibility
+            checkbox.toggled.connect(self.parent.update_main_tab_visibility)
             transit_columns_layout.addWidget(checkbox, row, col)
             col += 1
             if col >= max_col:

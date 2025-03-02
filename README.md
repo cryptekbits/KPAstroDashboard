@@ -94,3 +94,67 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - Thanks to Swiss Ephemeris for providing accurate astronomical data
 - Thanks to the KP astrology community for documentation on sub-lord divisions
+
+## Building the Application
+
+### Prerequisites
+
+- Python 3.9 or higher
+- PyQt5
+- Required Python packages (see requirements.txt)
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Building the Application
+
+```bash
+# Build for the current platform
+python build.py --clean
+
+# Build for all supported platforms (requires Docker)
+python build.py --clean --all-platforms
+```
+
+## Cross-Compilation Issues
+
+When cross-compiling the application (especially on Apple Silicon Macs), you might encounter issues with certain dependencies:
+
+### Common Issues:
+
+1. **PyQt5 Installation**: PyQt5 requires Qt libraries to be installed on the system.
+2. **Native Extensions**: Packages like `pyswisseph` (required by `flatlib`) need a C compiler.
+3. **Platform-specific Packages**: Some packages like `polars` and `numpy` may have issues when cross-compiled.
+
+### Solutions:
+
+1. **Use Docker with Proper Dependencies**: 
+   ```bash
+   python build.py --clean --target-platform windows --target-arch x64 --alt-win-image
+   ```
+
+2. **Build on Native Platforms**: For best results, build each platform's executable on that platform:
+   - Windows: Build on a Windows machine
+   - Linux: Build on a Linux machine
+   - macOS: Build on a Mac
+
+3. **Simplified Builds**: If you only need a subset of features, consider creating a simplified version:
+   ```bash
+   python build.py --clean --no-cross-platform
+   ```
+
+## Latest Version
+
+Current Version: 1.0.3 (Alpha Release)
+Build Date: 2025-06-13
+
+## Repository Information
+
+- GitHub Repository: https://github.com/cryptekbits/KPAstroDashboard
+
+## License
+
+[License information here]

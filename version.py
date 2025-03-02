@@ -4,9 +4,9 @@ This file is updated with each release.
 """
 
 # Version information
-VERSION = "1.0.1"
-VERSION_NAME = "BugFix Release"
-BUILD_DATE = "2025-03-02"
+VERSION = "1.0.3"
+VERSION_NAME = "Alpha Release"
+BUILD_DATE = "2025-06-13"
 
 # GitHub repository information
 GITHUB_REPO_OWNER = "cryptekbits"  # Replace with actual GitHub username

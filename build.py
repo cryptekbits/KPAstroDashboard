@@ -2,8 +2,30 @@
 """
 Build script for KP Astrology Dashboard
 
-This script packages the application into a standalone executable using PyInstaller.
-It handles both Windows and macOS builds.
+This script packages the application into standalone executables using PyInstaller.
+It supports building for multiple platforms and architectures:
+- Windows (x64)
+- macOS (x64, arm64)
+- Linux (x64, arm64)
+
+Cross-compilation is supported using Docker containers, allowing you to build
+for Windows and Linux from any platform.
+
+Usage examples:
+  # Build for the current platform
+  python build.py --clean
+  
+  # Build for Windows x64 (requires Docker)
+  python build.py --clean --target-platform windows --target-arch x64
+  
+  # Build for all supported platforms (requires Docker)
+  python build.py --clean --all-platforms
+  
+  # Build for Windows on Apple Silicon Mac using alternative Docker image
+  python build.py --clean --target-platform windows --target-arch x64 --alt-win-image
+  
+  # Create a ZIP archive of the portable application
+  python build.py --clean --zip
 """
 
 import os
@@ -13,6 +35,7 @@ import subprocess
 import shutil
 import argparse
 import zipfile
+import tempfile
 from pathlib import Path
 
 # Import version information
@@ -33,6 +56,8 @@ def main():
                         help="Target architecture for the build (default: auto-detect)")
     parser.add_argument("--all-platforms", action="store_true", 
                         help="Build for all supported platforms (requires Docker)")
+    parser.add_argument("--alt-win-image", action="store_true",
+                        help="Use alternative Docker image for Windows builds (useful for Apple Silicon Macs)")
     args = parser.parse_args()
     
     # If building for all platforms, use Docker to build for each platform
@@ -171,83 +196,339 @@ def create_zip_archive(output_name, is_macos):
         print(f"Failed to create ZIP archive: {e}")
         print(f"Failed to create ZIP archive.")
 
+def create_cross_compile_requirements(target_platform, target_arch):
+    """
+    Create a simplified requirements file for cross-compilation to avoid problematic dependencies
+    """
+    print("Creating modified requirements file for cross-compilation...")
+    
+    # Read the original requirements file
+    with open("requirements.txt", "r") as f:
+        requirements = f.readlines()
+    
+    # Create a backup of the original requirements file
+    shutil.copy("requirements.txt", "requirements.txt.bak")
+    
+    # Filter out problematic dependencies based on target platform
+    filtered_reqs = []
+    problematic_packages = []
+    
+    for req in requirements:
+        req = req.strip()
+        # Skip empty lines and comments
+        if not req or req.startswith("#"):
+            filtered_reqs.append(req)
+            continue
+        
+        package_name = req.split(">=")[0].split("==")[0].strip()
+        
+        # Check for problematic packages
+        if package_name == "PyQt5":
+            if target_platform == "windows":
+                # For Windows, use an older version of PyQt5 that has pre-built wheels
+                filtered_reqs.append("PyQt5==5.15.6")
+            elif target_platform == "linux" and target_arch == "arm64":
+                # For Linux ARM64, skip PyQt5 for now
+                filtered_reqs.append("# PyQt5 is skipped for ARM64 Linux - will be installed manually")
+                problematic_packages.append(package_name)
+            else:
+                filtered_reqs.append(req)
+        elif package_name == "flatlib":
+            # Handle flatlib separately
+            problematic_packages.append(package_name)
+            filtered_reqs.append("# flatlib is skipped - will be installed manually")
+        elif package_name in ["polars", "numpy", "pandas"] and target_arch == "arm64":
+            # These packages need special handling for ARM64
+            problematic_packages.append(package_name)
+            filtered_reqs.append(f"# {package_name} needs special handling for ARM64")
+        else:
+            filtered_reqs.append(req)
+    
+    # Write the modified requirements file
+    with open("requirements.cross.txt", "w") as f:
+        f.write("\n".join(filtered_reqs))
+    
+    print("Modified requirements.cross.txt created for cross-compilation")
+    
+    # Create a script to handle problematic packages
+    if problematic_packages:
+        create_package_handler_script(target_platform, target_arch, problematic_packages)
+    
+    return "requirements.cross.txt"
+
+def create_package_handler_script(target_platform, target_arch, problematic_packages):
+    """
+    Create a script to handle problematic packages
+    """
+    print(f"Creating script to handle problematic packages: {', '.join(problematic_packages)}")
+    
+    script_content = [
+        "#!/bin/bash",
+        "# Script to handle problematic packages for cross-compilation",
+        f"# Target: {target_platform}-{target_arch}",
+        ""
+    ]
+    
+    # Add commands for each problematic package
+    for package in problematic_packages:
+        if package == "PyQt5" and target_platform == "linux" and target_arch == "arm64":
+            script_content.extend([
+                "# Installing Qt dependencies",
+                "apt-get update",
+                "apt-get install -y qt5-default qttools5-dev-tools",
+                "# Try to install PyQt5 from source",
+                "pip install PyQt5 --no-binary PyQt5"
+            ])
+        elif package == "flatlib":
+            script_content.extend([
+                "# Installing flatlib dependencies",
+                "pip install pyswisseph==2.00.00-2 --no-deps",
+                "pip install flatlib --no-deps"
+            ])
+        elif package in ["polars", "numpy", "pandas"] and target_arch == "arm64":
+            script_content.extend([
+                f"# Installing {package} for ARM64",
+                f"pip install --no-binary :{package}: {package}"
+            ])
+    
+    # Write the script
+    with open("handle_packages.sh", "w") as f:
+        f.write("\n".join(script_content))
+    
+    # Make the script executable
+    os.chmod("handle_packages.sh", 0o755)
+    
+    print("Created handle_packages.sh script")
+
 def cross_compile(target_platform, target_arch, args):
     """
     Cross-compile for a different platform using Docker
     """
-    # Check if Docker is installed
-    if not shutil.which("docker"):
-        print("Error: Docker is required for cross-compilation but not found.")
-        print("Please install Docker and try again.")
-        return 1
-    
-    # Define Docker images for each platform/architecture
-    docker_images = {
-        "windows-x64": "cdrx/pyinstaller-windows:python3",
-        "linux-x64": "python:3.9-slim",
-        "linux-arm64": "arm64v8/python:3.9-slim",
-        "macos-x64": None,  # Not directly supported via Docker
-        "macos-arm64": None,  # Not directly supported via Docker
-    }
-    
-    target_key = f"{target_platform}-{target_arch}"
-    if target_key not in docker_images or docker_images[target_key] is None:
-        print(f"Error: Cross-compilation to {target_key} is not supported via Docker.")
-        print("You need to build directly on the target platform.")
-        return 1
-    
-    docker_image = docker_images[target_key]
-    
-    # Create Docker command
-    docker_cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{os.getcwd()}:/src",
-        "-w", "/src",
-        docker_image
-    ]
-    
-    # Prepare build command for the Docker container
-    build_args = []
-    if args.onefile:
-        build_args.append("--onefile")
-    if args.onedir:
-        build_args.append("--onedir")
-    if args.clean:
-        build_args.append("--clean")
-    if args.no_icon:
-        build_args.append("--no-icon")
-    if args.portable:
-        build_args.append("--portable")
-    if args.zip:
-        build_args.append("--zip")
-    
-    # Add target platform and architecture
-    build_args.extend(["--target-platform", target_platform, "--target-arch", target_arch])
-    
-    if target_platform == "windows":
-        # For Windows, use the pyinstaller-windows Docker image
-        docker_cmd.extend([
-            "bash", "-c",
-            f"pip install -r requirements.txt && python build.py {' '.join(build_args)}"
-        ])
-    else:
-        # For Linux, use the standard Python Docker image
-        docker_cmd.extend([
-            "bash", "-c",
-            f"pip install pyinstaller && pip install -r requirements.txt && python build.py {' '.join(build_args)}"
-        ])
-    
-    print(f"Running Docker for cross-compilation to {target_platform}-{target_arch}...")
-    print(f"Docker command: {' '.join(docker_cmd)}")
-    
-    # Run Docker command
     try:
-        subprocess.run(docker_cmd, check=True)
-        print(f"Cross-compilation for {target_platform}-{target_arch} completed successfully.")
-        return 0
-    except subprocess.CalledProcessError as e:
-        print(f"Error during cross-compilation: {e}")
-        return 1
+        # Check if Docker is installed
+        if not shutil.which("docker"):
+            print("Error: Docker is required for cross-compilation but not found.")
+            print("Please install Docker and try again.")
+            return 1
+        
+        # Special handling for Windows on Apple Silicon
+        is_apple_silicon = platform.system().lower() == "darwin" and platform.machine() == "arm64"
+        if target_platform == "windows" and is_apple_silicon:
+            return build_windows_on_apple_silicon(target_arch)
+        
+        # Create a simplified requirements file for cross-compilation
+        create_cross_compile_requirements(target_platform, target_arch)
+        
+        # Define Docker images for each platform/architecture
+        docker_images = {
+            "windows-x64": "cdrx/pyinstaller-windows:python3" if not args.alt_win_image else "mcci/windows-docker:latest",
+            "linux-x64": "python:3.9-slim",
+            "linux-arm64": "arm64v8/python:3.9-slim",
+            "macos-x64": None,  # Not directly supported via Docker
+            "macos-arm64": None,  # Not directly supported via Docker
+        }
+        
+        target_key = f"{target_platform}-{target_arch}"
+        if target_key not in docker_images or docker_images[target_key] is None:
+            print(f"Error: Cross-compilation to {target_key} is not supported via Docker.")
+            print("You need to build directly on the target platform.")
+            return 1
+        
+        docker_image = docker_images[target_key]
+        
+        # Check if we're on Apple Silicon Mac
+        is_apple_silicon = platform.system().lower() == "darwin" and platform.machine() == "arm64"
+        
+        # Create Docker command
+        docker_cmd = ["docker", "run", "--rm"]
+        
+        # Add platform flag if needed (for Apple Silicon Macs running x64 images)
+        if is_apple_silicon and target_arch == "x64" and not args.alt_win_image:
+            docker_cmd.extend(["--platform", "linux/amd64"])
+        
+        docker_cmd.extend([
+            "-v", f"{os.getcwd()}:/src",
+            "-w", "/src",
+            docker_image
+        ])
+        
+        # Prepare build command for the Docker container
+        build_args = []
+        if args.onefile:
+            build_args.append("--onefile")
+        if args.onedir:
+            build_args.append("--onedir")
+        if args.clean:
+            build_args.append("--clean")
+        if args.no_icon:
+            build_args.append("--no-icon")
+        if args.portable:
+            build_args.append("--portable")
+        if args.zip:
+            build_args.append("--zip")
+        
+        # Add target platform and architecture
+        build_args.extend(["--target-platform", target_platform, "--target-arch", target_arch])
+        
+        if target_platform == "windows":
+            # For Windows, use the pyinstaller-windows Docker image
+            # The cdrx/pyinstaller-windows image can be problematic on Apple Silicon
+            if is_apple_silicon:
+                print("Note: Building Windows executables on Apple Silicon may have issues.")
+                print("If this fails, consider using --alt-win-image or building on an Intel Mac/PC.")
+                
+            # Use a more robust command that handles potential issues with the image
+            if args.alt_win_image:
+                # For the alternative wine-based image
+                docker_cmd.extend([
+                    "bash", "-c",
+                    f"apt-get update && " +
+                    f"apt-get install -y python3 python3-pip python3-dev build-essential git && " +
+                    f"pip3 install --upgrade pip && " +
+                    f"pip3 install pyinstaller wheel setuptools && " +
+                    f"pip3 install -r requirements.cross.txt && " +
+                    f"chmod +x handle_packages.sh && " +
+                    f"./handle_packages.sh && " +
+                    f"python3 build.py {' '.join(build_args)}"
+                ])
+            else:
+                # For the standard cdrx/pyinstaller-windows image
+                docker_cmd.extend([
+                    "bash", "-c",
+                    f"pip install --upgrade pip && " +
+                    f"pip install wheel setuptools && " +
+                    f"pip install -r requirements.cross.txt && " +
+                    f"chmod +x handle_packages.sh && " +
+                    f"./handle_packages.sh && " +
+                    f"python -m pip install pyinstaller && " +
+                    f"python build.py {' '.join(build_args)}"
+                ])
+        else:
+            # For Linux, use the standard Python Docker image with necessary build dependencies
+            docker_cmd.extend([
+                "bash", "-c",
+                f"apt-get update && " +
+                f"apt-get install -y build-essential gcc g++ libgl1-mesa-dev && " +
+                f"pip install --upgrade pip && " +
+                f"pip install pyinstaller wheel setuptools && " +
+                f"pip install -r requirements.cross.txt && " +
+                f"chmod +x handle_packages.sh && " +
+                f"./handle_packages.sh && " +
+                f"python build.py {' '.join(build_args)}"
+            ])
+        
+        print(f"Running Docker for cross-compilation to {target_platform}-{target_arch}...")
+        print(f"Docker command: {' '.join(docker_cmd)}")
+        
+        # Run Docker command
+        try:
+            subprocess.run(docker_cmd, check=True)
+            print(f"Cross-compilation for {target_platform}-{target_arch} completed successfully.")
+            return 0
+        except subprocess.CalledProcessError as e:
+            print(f"Error during cross-compilation: {e}")
+            return 1
+    finally:
+        # Clean up cross-compilation files
+        cleanup_cross_compile_files()
+
+def build_windows_on_apple_silicon(target_arch):
+    """Special handling for building Windows on Apple Silicon."""
+    print("Detected Apple Silicon Mac building for Windows.")
+    print("Using specialized build approach for Windows on Apple Silicon.")
+    print("Setting up specialized Windows cross-compilation on Apple Silicon...")
+    
+    # Create a modified requirements file for cross-compilation
+    create_cross_compile_requirements("windows", target_arch)
+    
+    # No need to create a script to handle problematic packages here
+    # The create_cross_compile_requirements function already does this
+    
+    print("\n================================================================================")
+    print("WINDOWS BUILD ON APPLE SILICON")
+    print("================================================================================")
+    print("\nBuilding Windows applications on Apple Silicon is challenging due to architecture differences.")
+    print("Here are the recommended approaches:")
+    print("\n1. Use UTM or Parallels to run a Windows VM, then build natively:")
+    print("   - Install UTM (free) or Parallels (paid) on your Mac")
+    print("   - Install Windows 11 ARM64 edition in the VM")
+    print("   - Set up the development environment in Windows")
+    print("   - Run the build script directly in Windows")
+    print("\n2. Use a CI/CD service for cross-platform builds:")
+    print("   - Set up GitHub Actions to build for Windows")
+    print("   - Configure the workflow to run on Windows runners")
+    print("   - Push your code to GitHub and let the workflow build it")
+    print("\n3. Use a free Windows EC2 instance on AWS:")
+    print("   - Set up a t2.micro Windows instance (free tier eligible)")
+    print("   - Install Python and dependencies")
+    print("   - Build the application on the Windows instance")
+    print("\n4. Manual build with Wine (limited success):")
+    print("   - Install Wine on your Mac: brew install --cask wine-stable")
+    print("   - Set up Python in Wine: wine python-3.9.6-amd64.exe")
+    print("   - Run PyInstaller through Wine")
+    print("\nFor detailed instructions on any of these methods, refer to the documentation.")
+    print("================================================================================\n")
+    
+    # Clean up cross-compilation files
+    cleanup_cross_compile_files()
+    
+    return False  # Indicate build was not successful
+
+def print_alternative_build_method():
+    """
+    Print alternative build method instructions for Windows on Apple Silicon
+    """
+    print("\n" + "="*80)
+    print("ALTERNATIVE BUILD METHOD FOR WINDOWS ON APPLE SILICON")
+    print("="*80)
+    print("""
+Since Docker-based cross-compilation for Windows on Apple Silicon can be challenging,
+consider these alternative approaches:
+
+1. Use UTM or Parallels to run a Windows VM, then build natively:
+   - Install UTM (free) or Parallels (paid) on your Mac
+   - Install Windows 11 ARM64 edition in the VM
+   - Set up the development environment in Windows
+   - Run the build script directly in Windows
+
+2. Use a CI/CD service for cross-platform builds:
+   - Set up GitHub Actions to build for Windows
+   - Configure the workflow to run on Windows runners
+   - Push your code to GitHub and let the workflow build it
+
+3. Use a free Windows EC2 instance on AWS:
+   - Set up a t2.micro Windows instance (free tier eligible)
+   - Install Python and dependencies
+   - Build the application on the Windows instance
+
+4. Manual build without Docker:
+   - Install Wine on your Mac: brew install --cask wine-stable
+   - Set up Python in Wine: wine python-3.9.6-amd64.exe
+   - Run PyInstaller through Wine
+   
+For detailed instructions on any of these methods, refer to the documentation.
+""")
+    print("="*80 + "\n")
+
+def cleanup_cross_compile_files():
+    """
+    Clean up temporary files created for cross-compilation
+    """
+    print("Cleaning up cross-compilation files...")
+    
+    # Restore original requirements file
+    if os.path.exists("requirements.txt.bak"):
+        shutil.move("requirements.txt.bak", "requirements.txt")
+    
+    # Remove cross-compilation requirements file
+    if os.path.exists("requirements.cross.txt"):
+        os.remove("requirements.cross.txt")
+    
+    # Remove package handler script
+    if os.path.exists("handle_packages.sh"):
+        os.remove("handle_packages.sh")
+    
+    print("Cross-compilation files cleaned up")
 
 def build_all_platforms(args):
     """
@@ -277,6 +558,9 @@ def build_all_platforms(args):
     main_result = main_build(current_args)
     results[f"{current_platform}-{current_arch}"] = main_result == 0
     
+    # Check if we're on Apple Silicon Mac
+    is_apple_silicon = platform.system().lower() == "darwin" and platform.machine() == "arm64"
+    
     # Build for other platforms using Docker
     for target_platform in platforms:
         for target_arch in architectures:
@@ -291,6 +575,10 @@ def build_all_platforms(args):
             # Skip arm64 for Windows (not well supported)
             if target_platform == "windows" and target_arch == "arm64":
                 continue
+            
+            # For Apple Silicon Macs building Windows, suggest using the alternative image
+            if is_apple_silicon and target_platform == "windows" and not args.alt_win_image:
+                print("\nNote: Building Windows on Apple Silicon Mac. Consider using --alt-win-image if this fails.")
                 
             print(f"\nBuilding for {target_platform}-{target_arch}...")
             result = cross_compile(target_platform, target_arch, args)
@@ -347,6 +635,23 @@ def main_build(args):
         output_name = f"KPAstrologyDashboard-v{VERSION}-linux-{target_arch}"
         icon_file = "resources/favicon.ico" if not args.no_icon else None
     
+    # Create a temporary directory to backup existing builds
+    backup_dir = None
+    if os.path.exists("dist") and os.listdir("dist"):
+        print("Backing up existing builds...")
+        backup_dir = tempfile.mkdtemp()
+        # Backup existing builds
+        for item in os.listdir("dist"):
+            # Don't backup the same platform/arch we're building for to avoid confusion
+            if output_name not in item:
+                src = os.path.join("dist", item)
+                dst = os.path.join(backup_dir, item)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+        print(f"Existing builds backed up to {backup_dir}")
+    
     # Clean build directories if requested
     if args.clean:
         print("Cleaning build directories...")
@@ -354,7 +659,14 @@ def main_build(args):
             if os.path.exists("build"):
                 shutil.rmtree("build", ignore_errors=True)
             if os.path.exists("dist"):
-                shutil.rmtree("dist", ignore_errors=True)
+                # Remove only files related to the current platform/arch
+                for item in os.listdir("dist"):
+                    if output_name in item:
+                        item_path = os.path.join("dist", item)
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            os.remove(item_path)
             print("Build directories cleaned successfully.")
         except Exception as e:
             print(f"Warning: Could not clean directories completely: {e}")
@@ -474,6 +786,26 @@ def main_build(args):
         create_windows_installer(output_name, VERSION)
     
     print(f"Build completed successfully. Output in dist/{output_name}")
+    
+    # After build is complete, restore backed up files
+    if backup_dir:
+        print("Restoring backed up builds...")
+        # Create dist directory if it doesn't exist
+        os.makedirs("dist", exist_ok=True)
+        # Restore backed up builds
+        for item in os.listdir(backup_dir):
+            src = os.path.join(backup_dir, item)
+            dst = os.path.join("dist", item)
+            if os.path.isdir(src):
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+        # Clean up temporary directory
+        shutil.rmtree(backup_dir)
+        print("Backed up builds restored successfully.")
+    
     return 0
 
 if __name__ == "__main__":
