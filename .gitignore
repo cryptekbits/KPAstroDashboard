@@ -173,3 +173,5 @@ cython_debug/
 archive/
 .aider*
 *.xlsx
+config.json
+*.zip
