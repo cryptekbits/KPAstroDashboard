@@ -4,7 +4,7 @@ This file is updated with each release.
 """
 
 # Version information
-VERSION = "1.0.5"
+VERSION = "1.0.6"
 VERSION_NAME = "Alpha Release (Stable)"
 BUILD_DATE = "2025-03-03"
 
