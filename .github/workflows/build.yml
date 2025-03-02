@@ -41,7 +41,7 @@ jobs:
           dist/KPAstrologyDashboard-*.zip
         retention-days: 7
   
-  build-macos-x64:
+  build-macos-universal:
     runs-on: macos-latest
     
     steps:
@@ -60,62 +60,34 @@ jobs:
         pip install pyinstaller
         pip install -r requirements.txt
       
-    - name: Build macOS Intel executable
+    - name: Print system information
       run: |
-        python build.py --target-platform macos --target-arch x64 --onefile --portable --clean
+        echo "macOS version: $(sw_vers -productVersion)"
+        echo "Architecture: $(uname -m)"
+        python -c "import platform; print(f'Python architecture: {platform.machine()}')"
+      
+    - name: Build macOS Universal executable
+      run: |
+        # Force native build instead of cross-compilation
+        python build.py --target-platform macos --target-arch auto --onefile --portable --clean
+      
+    - name: List build artifacts
+      run: |
+        echo "Contents of dist directory:"
+        ls -la dist/
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kp-dashboard-macos-x64
+        name: kp-dashboard-macos
         path: |
-          dist/*.app
-          dist/*.zip
-          dist/KPAstrologyDashboard-*
-        retention-days: 7
-  
-  build-macos-arm64:
-    runs-on: macos-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-        cache: 'pip'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install -r requirements.txt
-      
-    - name: Build macOS Apple Silicon executable
-      run: |
-        # Set environment variables to target arm64
-        export MACOSX_DEPLOYMENT_TARGET=11.0
-        export ARCHFLAGS="-arch arm64"
-        
-        # Build for Apple Silicon
-        python build.py --target-platform macos --target-arch arm64 --onefile --portable --clean
-      
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: kp-dashboard-macos-arm64
-        path: |
-          dist/*.app
-          dist/*.zip
-          dist/KPAstrologyDashboard-*
+          dist/*
         retention-days: 7
 
   # This job creates a GitHub release with all artifacts when a tag is pushed
   create-release:
     name: Create Release
-    needs: [build-windows, build-macos-x64, build-macos-arm64]
+    needs: [build-windows, build-macos-universal]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     
@@ -134,8 +106,9 @@ jobs:
         run: |
           mkdir -p release-artifacts
           # Copy all binary artifacts to the release directory
-          find all-artifacts -type f -name "*.exe" -o -name "*.zip" -o -name "*.app" | xargs -I{} cp {} release-artifacts/
+          find all-artifacts -type f -not -path "*/\.*" | xargs -I{} cp -v {} release-artifacts/ || true
           # List what we've collected
+          echo "Contents of release-artifacts directory:"
           ls -la release-artifacts/
           
       - name: Extract version from tag
