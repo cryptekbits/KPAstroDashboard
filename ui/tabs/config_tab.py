@@ -385,6 +385,10 @@ class ConfigTab:
             # Save to JSON file
             with open(self.config_file, 'w') as f:
                 json.dump(config_settings, f, indent=4)
+            
+            # Update main tab visibility
+            if hasattr(self.parent, 'update_main_tab_visibility'):
+                self.parent.update_main_tab_visibility()
                 
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.information(self.parent, "Configuration Saved", 

@@ -91,9 +91,15 @@ class KPAstrologyApp(QMainWindow):
 
     def update_main_tab_visibility(self):
         """Update the visibility of components in the main tab based on configuration settings."""
-        # Load configuration
-        config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
         try:
+            # First try to get configuration directly from config_tab if available
+            if hasattr(self, 'config_tab'):
+                config_settings = self.config_tab.get_config_settings()
+                self.main_tab.update_visibility(config_settings)
+                return
+                
+            # Fall back to loading from file if config_tab is not available
+            config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
             with open(config_file, 'r') as f:
                 config_settings = json.load(f)
                 

@@ -4,6 +4,7 @@ Aspect controls for the KP Astrology application.
 
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                             QGroupBox, QCheckBox, QGridLayout)
+import os
 
 
 class AspectControls:
@@ -200,6 +201,8 @@ class AspectControls:
         """Update the main tab visibility when aspect configuration changes."""
         from PyQt5.QtWidgets import QApplication
         main_window = QApplication.activeWindow()
+        
+        # Update the visibility directly using the main window's method
         if hasattr(main_window, 'update_main_tab_visibility'):
             main_window.update_main_tab_visibility()
 
