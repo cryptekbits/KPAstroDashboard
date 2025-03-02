@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import pytz
 import pandas as pd
-from aspect_calculator import AspectCalculator
+from .aspect_calculator import AspectCalculator
 
 
 class TransitCalculator:
