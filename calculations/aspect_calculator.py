@@ -88,6 +88,10 @@ class AspectCalculator:
                 p1 = planet_keys[i]
                 p2 = planet_keys[j]
 
+                # Skip aspects involving Ascendant if it's not in selected_planets
+                if (p1 == "Asc" or p2 == "Asc") and "Ascendant" not in self.selected_planets:
+                    continue
+
                 # Calculate the angular distance
                 degree_diff = abs(planet_positions[p1] - planet_positions[p2])
                 if degree_diff > 180:

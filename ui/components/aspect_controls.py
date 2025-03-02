@@ -68,7 +68,7 @@ class AspectControls:
         aspects_layout = QVBoxLayout()
         aspects_group.setLayout(aspects_layout)
 
-        self.aspect_checkboxes = {}
+        self.aspect_checkboxes = []
 
         # Create a grid layout for aspect checkboxes (3 columns)
         aspect_grid = QGridLayout()
@@ -79,7 +79,9 @@ class AspectControls:
             checkbox_text = f"{aspect['symbol']} {aspect['name']} ({aspect['angle']}°)"
             checkbox = QCheckBox(checkbox_text)
             checkbox.setChecked(aspect["default"])  # Set default selection
-            self.aspect_checkboxes[aspect['angle']] = checkbox
+            # Store the angle as an attribute of the checkbox for easier access
+            checkbox.angle = aspect['angle']
+            self.aspect_checkboxes.append(checkbox)
             aspect_grid.addWidget(checkbox, row, col)
 
             col += 1
@@ -143,18 +145,9 @@ class AspectControls:
         main_layout : QLayout
             Layout to add the buttons to
         """
-        select_layout = QHBoxLayout()
-
-        select_all_aspects_btn = QPushButton("Select All Aspects")
-        select_all_aspects_btn.clicked.connect(self.select_all_aspects)
-
-        select_no_aspects_btn = QPushButton("Select No Aspects")
-        select_no_aspects_btn.clicked.connect(self.select_no_aspects)
-
-        select_layout.addWidget(select_all_aspects_btn)
-        select_layout.addWidget(select_no_aspects_btn)
-
-        main_layout.addLayout(select_layout)
+        # This method is kept empty to maintain compatibility with existing code
+        # The "Select All Aspects" and "Select No Aspects" buttons have been removed
+        pass
 
     def setup_aspects_configuration(self, tab_layout):
         """
@@ -194,7 +187,7 @@ class AspectControls:
         aspects_enabled.toggled.connect(self._update_main_tab_visibility)
         
         # Connect all aspect checkboxes to update main tab visibility
-        for checkbox in self.aspect_checkboxes.values():
+        for checkbox in self.aspect_checkboxes:
             checkbox.toggled.connect(self._update_main_tab_visibility)
         
         # Connect all aspect planet checkboxes to update main tab visibility
@@ -212,7 +205,7 @@ class AspectControls:
 
     def select_all_aspects(self):
         """Select all aspect checkboxes."""
-        for checkbox in self.aspect_checkboxes.values():
+        for checkbox in self.aspect_checkboxes:
             checkbox.setChecked(True)
         
         # Update main tab visibility
@@ -220,7 +213,7 @@ class AspectControls:
 
     def select_no_aspects(self):
         """Deselect all aspect checkboxes."""
-        for checkbox in self.aspect_checkboxes.values():
+        for checkbox in self.aspect_checkboxes:
             checkbox.setChecked(False)
         
         # Update main tab visibility
@@ -232,8 +225,8 @@ class AspectControls:
         
         Returns:
         --------
-        list
-            List of selected aspect angles
+        dict
+            Dictionary of selected aspect angles with angle as key and boolean as value
         """
         # Only return aspects if the main aspect toggle is enabled
         # This will be checked by the caller, but we add it here for safety
@@ -241,10 +234,10 @@ class AspectControls:
         main_window = QApplication.activeWindow()
         if hasattr(main_window, 'config_tab') and hasattr(main_window.config_tab, 'aspects_enabled'):
             if not main_window.config_tab.aspects_enabled.isChecked():
-                return []
+                return {}
         
-        return [angle for angle, checkbox in self.aspect_checkboxes.items()
-                if checkbox.isChecked()]
+        # Return a dictionary with angle as key and boolean as value
+        return {str(checkbox.angle): checkbox.isChecked() for checkbox in self.aspect_checkboxes}
 
     def get_selected_aspect_planets(self):
         """
@@ -252,18 +245,18 @@ class AspectControls:
         
         Returns:
         --------
-        list
-            List of selected planet names
+        dict
+            Dictionary of selected planet names with name as key and boolean as value
         """
         # Only return aspect planets if the main aspect toggle is enabled
         from PyQt5.QtWidgets import QApplication
         main_window = QApplication.activeWindow()
         if hasattr(main_window, 'config_tab') and hasattr(main_window.config_tab, 'aspects_enabled'):
             if not main_window.config_tab.aspects_enabled.isChecked():
-                return []
+                return {}
         
-        return [name for name, checkbox in self.aspect_planets_checkboxes.items()
-                if checkbox.isChecked()]
+        # Return a dictionary with planet name as key and boolean as value
+        return {name: checkbox.isChecked() for name, checkbox in self.aspect_planets_checkboxes.items()}
 
     def load_aspect_config(self, config_settings):
         """
@@ -283,8 +276,9 @@ class AspectControls:
         if "aspect_list" in aspects_config:
             for angle_str, enabled in aspects_config["aspect_list"].items():
                 angle = int(angle_str)  # Convert string key to integer
-                if angle in self.aspect_checkboxes:
-                    self.aspect_checkboxes[angle].setChecked(enabled)
+                for checkbox in self.aspect_checkboxes:
+                    if hasattr(checkbox, 'angle') and checkbox.angle == angle:
+                        checkbox.setChecked(enabled)
         
         # Load aspect planets settings if available
         if "aspect_planets" in aspects_config:

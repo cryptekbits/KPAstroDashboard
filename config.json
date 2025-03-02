@@ -9,7 +9,9 @@
             "Sub Lord": true,
             "Sub-Sub Lord": true,
             "Position": true,
-            "Retrograde": true
+            "Retrograde": true,
+            "House": true,
+            "KP Pointer": true
         },
         "planets": {
             "Sun": true,
@@ -36,7 +38,7 @@
         }
     },
     "transit": {
-        "enabled": false,
+        "enabled": true,
         "columns": {
             "Start Time": true,
             "End Time": true,
@@ -51,26 +53,52 @@
         }
     },
     "aspects": {
-        "enabled": true
+        "enabled": true,
+        "aspect_list": {
+            "0": true,
+            "30": false,
+            "60": false,
+            "90": true,
+            "120": true,
+            "150": false,
+            "180": true
+        },
+        "aspect_planets": {
+            "Sun": true,
+            "Moon": true,
+            "Mercury": true,
+            "Venus": true,
+            "Mars": true,
+            "Jupiter": true,
+            "Saturn": true,
+            "Rahu": true,
+            "Ketu": true,
+            "Ascendant": false,
+            "Uranus": false,
+            "Neptune": false
+        }
     },
     "yoga": {
         "enabled": true,
         "columns": {
-            "Yoga": true,
+            "Start Date": true,
             "Start Time": true,
+            "End Date": true,
             "End Time": true,
+            "Yoga": true,
+            "Planets": true,
             "Nature": true,
             "Description": true
         },
         "types": {
-            "Budha-Aditya Yoga": true,
-            "Raja Yoga": true,
-            "Hamsa Yoga": true,
-            "Malavya Yoga": true,
-            "Bhadra Yoga": true,
-            "Ruchaka Yoga": true,
-            "Sasa Yoga": true,
-            "Neech Bhanga Raja Yoga": true,
+            "Budha-Aditya Yoga": false,
+            "Raja Yoga": false,
+            "Hamsa Yoga": false,
+            "Malavya Yoga": false,
+            "Bhadra Yoga": false,
+            "Ruchaka Yoga": false,
+            "Sasa Yoga": false,
+            "Neech Bhanga Raja Yoga": false,
             "Gaja-Kesari Yoga": true,
             "Gajakesari Yoga": true,
             "Dhana Yoga": true,
@@ -83,8 +111,8 @@
             "Angarak Yoga": true,
             "Graha Yuddha": true,
             "Kemadruma Yoga": true,
-            "Vish Yoga": true,
-            "Kala Sarpa Yoga": true
+            "Vish Yoga": false,
+            "Kala Sarpa Yoga": false
         }
     }
 }

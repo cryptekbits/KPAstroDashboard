@@ -197,9 +197,13 @@ class PlanetPositionCalculator:
             planet_rows.append({
                 "Planet": planet_name,
                 "Position": position_str,
-                "Sign": planet.Rasi,
+                "Rashi": planet.Rasi,
                 "House": planet.HouseNr if planet.HouseNr else "-",
                 "Nakshatra": planet.Nakshatra,
+                "Rashi Lord": planet.RasiLord,
+                "Nakshatra Lord": planet.NakshatraLord,
+                "Sub Lord": planet.SubLord,
+                "Sub-Sub Lord": planet.SubSubLord,
                 "KP Pointer": kp_pointer,
                 "Retrograde": retrograde,
                 "LonDecDeg": planet.LonDecDeg

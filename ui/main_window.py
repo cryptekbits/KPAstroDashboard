@@ -5,6 +5,7 @@ Main window for the KP Astrology application.
 import os
 import logging
 import traceback
+import json
 from datetime import datetime
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QMessageBox
 from PyQt5.QtCore import QThread
@@ -54,9 +55,19 @@ class KPAstrologyApp(QMainWindow):
         tab_widget.addTab(config_tab, "Configuration")
 
     def update_main_tab_visibility(self):
-        """Update visibility of main tab components based on configuration settings."""
-        config_settings = self.config_tab.get_config_settings()
-        self.main_tab.update_visibility(config_settings)
+        """Update the visibility of components in the main tab based on configuration settings."""
+        # Load configuration
+        config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
+        try:
+            with open(config_file, 'r') as f:
+                config_settings = json.load(f)
+                
+            # Update main tab visibility based on configuration
+            self.main_tab.update_visibility(config_settings)
+            
+        except Exception as e:
+            logging.error(f"Failed to update main tab visibility: {str(e)}")
+            traceback.print_exc()
 
     def generate_data(self):
         """Generate data and create Excel file."""

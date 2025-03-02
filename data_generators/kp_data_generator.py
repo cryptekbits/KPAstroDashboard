@@ -594,6 +594,13 @@ class KPDataGenerator:
 
         df = pd.DataFrame(final_yogas)
 
+        # Ensure all required columns are present
+        required_columns = ["Start Date", "Start Time", "End Date", "End Time", 
+                           "Yoga", "Planets", "Nature", "Description"]
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = ""  # Add empty column if missing
+
         # Sort by start date and time
         df = df.sort_values(["Start Date", "Start Time"])
 

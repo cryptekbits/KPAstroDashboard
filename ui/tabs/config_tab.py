@@ -145,7 +145,9 @@ class ConfigTab:
             "Sub Lord": QCheckBox("Sub Lord"),
             "Sub-Sub Lord": QCheckBox("Sub-Sub Lord"),
             "Position": QCheckBox("Position"),
-            "Retrograde": QCheckBox("Retrograde")
+            "Retrograde": QCheckBox("Retrograde"),
+            "House": QCheckBox("House"),
+            "KP Pointer": QCheckBox("KP Pointer")
         }
         
         row, col = 0, 0
@@ -419,7 +421,7 @@ class ConfigTab:
             # Aspects settings
             "aspects": {
                 "enabled": self.aspects_enabled.isChecked(),
-                "aspect_list": {str(angle): checkbox.isChecked() for angle, checkbox in self.aspect_controls.aspect_checkboxes.items()},
+                "aspect_list": {str(checkbox.angle): checkbox.isChecked() for checkbox in self.aspect_controls.aspect_checkboxes},
                 "aspect_planets": {name: checkbox.isChecked() for name, checkbox in self.aspect_controls.aspect_planets_checkboxes.items()}
             },
             # Yoga settings

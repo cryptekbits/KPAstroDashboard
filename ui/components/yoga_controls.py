@@ -169,9 +169,12 @@ class YogaControls:
         
         # Yoga columns
         yoga_columns = {
-            "Yoga": QCheckBox("Yoga Name"),
+            "Start Date": QCheckBox("Start Date"),
             "Start Time": QCheckBox("Start Time"),
+            "End Date": QCheckBox("End Date"),
             "End Time": QCheckBox("End Time"),
+            "Yoga": QCheckBox("Yoga Name"),
+            "Planets": QCheckBox("Planets"),
             "Nature": QCheckBox("Nature"),
             "Description": QCheckBox("Description")
         }

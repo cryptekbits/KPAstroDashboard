@@ -37,6 +37,9 @@ class MainTab:
         self.generate_btn = None
         self.aspect_group = None
         self.aspect_planets_group = None
+        
+        # Load default settings after UI is created
+        self.default_settings = self.load_default_settings()
 
     def setup_tab(self):
         """
@@ -84,19 +87,27 @@ class MainTab:
         # Planets for aspects selection
         self.aspect_planets_group = self.aspect_controls.create_aspect_planets_group(main_layout)
 
-        # Selection buttons for aspects
-        self.aspect_controls.create_aspect_buttons(main_layout)
-
-        # Selection buttons for sheets
-        self.create_selection_buttons(main_layout)
-
         # Progress bar and status label
         self.create_progress_section(main_layout)
 
+        # Buttons layout
+        buttons_layout = QHBoxLayout()
+        
         # Generate button
         self.generate_btn = QPushButton("Generate Excel")
         self.generate_btn.clicked.connect(self.parent.generate_data)
-        main_layout.addWidget(self.generate_btn)
+        buttons_layout.addWidget(self.generate_btn)
+        
+        # Save Default button
+        save_default_btn = QPushButton("Save Default")
+        save_default_btn.setToolTip("Save current selections as default for next time")
+        save_default_btn.clicked.connect(self.save_default)
+        buttons_layout.addWidget(save_default_btn)
+        
+        main_layout.addLayout(buttons_layout)
+        
+        # Apply default settings after all UI components are created
+        self.apply_default_settings()
         
         return main_tab
 
@@ -203,28 +214,6 @@ class MainTab:
         sheets_layout.addLayout(grid_layout)
         main_layout.addWidget(sheets_group)
 
-    def create_selection_buttons(self, main_layout):
-        """
-        Create sheet selection buttons.
-        
-        Parameters:
-        -----------
-        main_layout : QLayout
-            Layout to add the buttons to
-        """
-        select_layout = QHBoxLayout()
-
-        select_all_btn = QPushButton("Select All Sheets")
-        select_all_btn.clicked.connect(self.select_all_sheets)
-
-        select_none_btn = QPushButton("Select No Sheets")
-        select_none_btn.clicked.connect(self.select_no_sheets)
-
-        select_layout.addWidget(select_all_btn)
-        select_layout.addWidget(select_none_btn)
-
-        main_layout.addLayout(select_layout)
-
     def create_progress_section(self, main_layout):
         """
         Create progress bar and status section.
@@ -314,11 +303,12 @@ class MainTab:
             if "aspect_list" in config_settings["aspects"]:
                 for angle_str, enabled in config_settings["aspects"]["aspect_list"].items():
                     angle = int(angle_str)
-                    if angle in self.aspect_controls.aspect_checkboxes:
-                        # Only show enabled aspects if the main aspect toggle is enabled
-                        self.aspect_controls.aspect_checkboxes[angle].setVisible(
-                            config_settings["aspects"]["enabled"] and enabled
-                        )
+                    for checkbox in self.aspect_controls.aspect_checkboxes:
+                        if hasattr(checkbox, 'angle') and checkbox.angle == angle:
+                            # Only show enabled aspects if the main aspect toggle is enabled
+                            checkbox.setVisible(
+                                config_settings["aspects"]["enabled"] and enabled
+                            )
         
             # 6. Update aspect planet checkboxes based on configuration
             if "aspect_planets" in config_settings["aspects"]:
@@ -339,4 +329,183 @@ class MainTab:
             List of selected sheet names
         """
         return [name for name, checkbox in self.sheet_checkboxes.items()
-                if checkbox.isChecked()] 
+                if checkbox.isChecked()]
+
+    def save_default(self):
+        """
+        Save the current user selections as default settings.
+        This will save location, date, time, selected sheets, yoga settings, and aspect settings.
+        """
+        try:
+            import json
+            import os
+            from PyQt5.QtWidgets import QMessageBox
+            
+            # Get the config file path
+            config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config.json')
+            
+            # Load existing config
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                
+            # If user_defaults doesn't exist, create it
+            if 'user_defaults' not in config:
+                config['user_defaults'] = {}
+                
+            # Save location
+            config['user_defaults']['location'] = self.location_combo.currentText()
+            
+            # Save date and time
+            config['user_defaults']['date'] = self.date_picker.date().toString("yyyy-MM-dd")
+            config['user_defaults']['time'] = self.time_picker.time().toString("hh:mm")
+            
+            # Save selected sheets
+            config['user_defaults']['selected_sheets'] = self.get_selected_sheets()
+            
+            # Save yoga settings
+            yoga_start_date = self.yoga_controls.yoga_start_date.date().toString("yyyy-MM-dd") if self.yoga_controls.yoga_start_date else None
+            yoga_end_date = self.yoga_controls.yoga_end_date.date().toString("yyyy-MM-dd") if self.yoga_controls.yoga_end_date else None
+            yoga_time_interval = self.yoga_controls.yoga_time_interval.currentText() if self.yoga_controls.yoga_time_interval else None
+            
+            config['user_defaults']['yoga'] = {
+                'start_date': yoga_start_date,
+                'end_date': yoga_end_date,
+                'time_interval': yoga_time_interval
+            }
+            
+            # Save aspect settings
+            config['user_defaults']['aspects'] = self.aspect_controls.get_selected_aspects()
+            config['user_defaults']['aspect_planets'] = self.aspect_controls.get_selected_aspect_planets()
+            
+            # Save to file
+            with open(config_file, 'w') as f:
+                json.dump(config, f, indent=4)
+                
+            # Show success message
+            QMessageBox.information(self.parent, "Default Settings Saved", 
+                                  "Your current selections have been saved as default settings.")
+                                  
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            import logging
+            logging.error(f"Failed to save default settings: {str(e)}")
+            QMessageBox.warning(self.parent, "Save Default Error", 
+                               f"Failed to save default settings: {str(e)}")
+                               
+    def load_default_settings(self):
+        """
+        Load default settings from config file.
+        
+        Returns:
+        --------
+        dict
+            Dictionary of default settings or None if not found
+        """
+        try:
+            import json
+            import os
+            import logging
+            
+            # Get the config file path
+            config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config.json')
+            
+            # Load config
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                
+            # Return user defaults if they exist
+            if 'user_defaults' in config:
+                return config['user_defaults']
+                
+        except Exception as e:
+            logging.error(f"Failed to load default settings: {str(e)}")
+            
+        return None
+        
+    def apply_default_settings(self):
+        """
+        Apply the loaded default settings to the UI components.
+        This should be called after the UI components are created.
+        """
+        if not self.default_settings:
+            return
+            
+        try:
+            # Apply location
+            if 'location' in self.default_settings and self.location_combo:
+                index = self.location_combo.findText(self.default_settings['location'])
+                if index >= 0:
+                    self.location_combo.setCurrentIndex(index)
+                    
+            # Apply date
+            if 'date' in self.default_settings and self.date_picker:
+                from PyQt5.QtCore import QDate
+                date_str = self.default_settings['date']
+                date = QDate.fromString(date_str, "yyyy-MM-dd")
+                if date.isValid():
+                    self.date_picker.setDate(date)
+                    
+            # Apply time
+            if 'time' in self.default_settings and self.time_picker:
+                from PyQt5.QtCore import QTime
+                time_str = self.default_settings['time']
+                time = QTime.fromString(time_str, "hh:mm")
+                if time.isValid():
+                    self.time_picker.setTime(time)
+                    
+            # Apply selected sheets
+            if 'selected_sheets' in self.default_settings and self.sheet_checkboxes:
+                selected_sheets = self.default_settings['selected_sheets']
+                # First uncheck all
+                for checkbox in self.sheet_checkboxes.values():
+                    checkbox.setChecked(False)
+                # Then check only the selected ones
+                for sheet_name in selected_sheets:
+                    if sheet_name in self.sheet_checkboxes:
+                        self.sheet_checkboxes[sheet_name].setChecked(True)
+                        
+            # Apply yoga settings
+            if 'yoga' in self.default_settings:
+                yoga_defaults = self.default_settings['yoga']
+                
+                # Apply yoga start date
+                if 'start_date' in yoga_defaults and yoga_defaults['start_date'] and self.yoga_controls.yoga_start_date:
+                    from PyQt5.QtCore import QDate
+                    date_str = yoga_defaults['start_date']
+                    date = QDate.fromString(date_str, "yyyy-MM-dd")
+                    if date.isValid():
+                        self.yoga_controls.yoga_start_date.setDate(date)
+                        
+                # Apply yoga end date
+                if 'end_date' in yoga_defaults and yoga_defaults['end_date'] and self.yoga_controls.yoga_end_date:
+                    from PyQt5.QtCore import QDate
+                    date_str = yoga_defaults['end_date']
+                    date = QDate.fromString(date_str, "yyyy-MM-dd")
+                    if date.isValid():
+                        self.yoga_controls.yoga_end_date.setDate(date)
+                        
+                # Apply yoga time interval
+                if 'time_interval' in yoga_defaults and yoga_defaults['time_interval'] and self.yoga_controls.yoga_time_interval:
+                    index = self.yoga_controls.yoga_time_interval.findText(yoga_defaults['time_interval'])
+                    if index >= 0:
+                        self.yoga_controls.yoga_time_interval.setCurrentIndex(index)
+                        
+            # Apply aspect settings
+            if 'aspects' in self.default_settings and self.aspect_controls.aspect_checkboxes:
+                aspects = self.default_settings['aspects']
+                for angle_str, is_selected in aspects.items():
+                    angle = int(angle_str)
+                    for aspect_checkbox in self.aspect_controls.aspect_checkboxes:
+                        if hasattr(aspect_checkbox, 'angle') and aspect_checkbox.angle == angle:
+                            aspect_checkbox.setChecked(is_selected)
+                            
+            # Apply aspect planets
+            if 'aspect_planets' in self.default_settings and self.aspect_controls.aspect_planets_checkboxes:
+                aspect_planets = self.default_settings['aspect_planets']
+                for planet, is_selected in aspect_planets.items():
+                    if planet in self.aspect_controls.aspect_planets_checkboxes:
+                        self.aspect_controls.aspect_planets_checkboxes[planet].setChecked(is_selected)
+                        
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to apply default settings: {str(e)}") 

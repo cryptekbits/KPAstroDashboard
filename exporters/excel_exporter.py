@@ -254,14 +254,28 @@ class ExcelExporter:
             for col_num in range(len(df.columns)):
                 worksheet.write(row_num, col_num, df.iloc[row_num - 1, col_num], cell_format)
 
-        # Set column widths
-        worksheet.set_column('A:A', 12)  # Planet column
-        worksheet.set_column('B:B', 18)  # Position column
-        worksheet.set_column('C:C', 10)  # Sign column
-        worksheet.set_column('D:D', 8)  # House column
-        worksheet.set_column('E:E', 14)  # Nakshatra column
-        worksheet.set_column('F:F', 25)  # KP Pointer column
-        worksheet.set_column('G:G', 10)  # Retrograde column
+        # Set column widths based on actual columns in the dataframe
+        column_widths = {
+            'Planet': 12,
+            'Position': 18,
+            'Sign': 10,
+            'Rashi': 10,
+            'House': 8,
+            'Nakshatra': 14,
+            'KP Pointer': 25,
+            'Rashi Lord': 12,
+            'Nakshatra Lord': 14,
+            'Sub Lord': 10,
+            'Sub-Sub Lord': 12,
+            'Retrograde': 10
+        }
+        
+        # Apply column widths for columns that exist in the dataframe
+        for col_num, col_name in enumerate(df.columns):
+            if col_name in column_widths:
+                worksheet.set_column(col_num, col_num, column_widths[col_name])
+            else:
+                worksheet.set_column(col_num, col_num, 12)  # Default width for other columns
 
         # Add filter and freeze panes
         worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
@@ -315,10 +329,22 @@ class ExcelExporter:
             for col_num in range(len(df.columns)):
                 worksheet.write(row_num, col_num, df.iloc[row_num - 1, col_num], row_format)
 
-        # Set column widths
-        worksheet.set_column('A:B', 12)  # Time columns
-        worksheet.set_column('C:C', 10)  # Planet column
-        worksheet.set_column('D:D', 12)  # Day/Night column
+        # Set column widths based on actual columns in the dataframe
+        column_widths = {
+            'Start Time': 12,
+            'End Time': 12,
+            'Planet': 10,
+            'Hora Lord': 12,
+            'Day Lord': 12,
+            'Day/Night': 12
+        }
+        
+        # Apply column widths for columns that exist in the dataframe
+        for col_num, col_name in enumerate(df.columns):
+            if col_name in column_widths:
+                worksheet.set_column(col_num, col_num, column_widths[col_name])
+            else:
+                worksheet.set_column(col_num, col_num, 12)  # Default width for other columns
 
         # Add filter and freeze panes
         worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)

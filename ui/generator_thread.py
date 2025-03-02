@@ -277,26 +277,48 @@ class GeneratorThread(QThread):
                 if self.config_settings and "yoga" in self.config_settings:
                     yoga_config = self.config_settings["yoga"]
                     
+                    # Debug: Print column names before filtering
+                    print("Yoga DataFrame columns before filtering:", yoga_df.columns.tolist())
+                    
                     # Filter columns based on configuration
                     if "columns" in yoga_config:
                         columns_to_keep = [col for col, enabled in 
                                           yoga_config["columns"].items() 
                                           if enabled]
                         
+                        # Debug: Print columns to keep
+                        print("Columns to keep:", columns_to_keep)
+                        
                         # Map column names from config to actual column names in DataFrame
                         column_mapping = {
-                            "Yoga": "Yoga",
+                            "Start Date": "Start Date",
                             "Start Time": "Start Time",
+                            "End Date": "End Date",
                             "End Time": "End Time",
+                            "Yoga": "Yoga",
+                            "Planets": "Planets",
                             "Nature": "Nature",
                             "Description": "Description"
                         }
                         
+                        # Debug: Print column mapping
+                        print("Column mapping:", column_mapping)
+                        
                         # Keep only the selected columns
                         columns_to_keep_mapped = [column_mapping.get(col, col) for col in columns_to_keep]
+                        
+                        # Debug: Print columns to keep after mapping
+                        print("Columns to keep after mapping:", columns_to_keep_mapped)
+                        
+                        # Debug: Print columns that exist in the DataFrame
+                        print("Columns that exist in the DataFrame:", [col for col in columns_to_keep_mapped if col in yoga_df.columns])
+                        
                         yoga_df = yoga_df[
                             [col for col in yoga_df.columns if col in columns_to_keep_mapped]
                         ]
+                        
+                        # Debug: Print column names after filtering
+                        print("Yoga DataFrame columns after filtering:", yoga_df.columns.tolist())
 
                 # Store the yoga data in results
                 results["Yogas"] = yoga_df

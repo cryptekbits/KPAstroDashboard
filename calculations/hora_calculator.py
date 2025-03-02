@@ -139,6 +139,9 @@ class HoraCalculator:
         # Get day of week based on the sunrise time in local timezone
         day_of_week = sunrise.strftime("%A")
         hora_rulers = self._get_hora_rulers_for_day(day_of_week)
+        
+        # Get the day lord (ruler of the day)
+        day_lord = hora_rulers[0]  # First ruler in the sequence is the day lord
 
         # Calculate hora timings
         hora_rows = []
@@ -157,10 +160,14 @@ class HoraCalculator:
 
             # Only include horas that overlap with our time range
             if hora_end > start_dt and current_time < end_dt:
+                hora_lord = hora_rulers[hora_index % 7]
+                
                 hora_rows.append({
                     "Start Time": max(current_time, start_dt).strftime("%H:%M"),
                     "End Time": min(hora_end, end_dt).strftime("%H:%M"),
-                    "Planet": hora_rulers[hora_index % 7],
+                    "Planet": hora_lord,
+                    "Hora Lord": hora_lord,
+                    "Day Lord": day_lord,
                     "Day/Night": "Day" if is_day_hora else "Night"
                 })
 

@@ -98,6 +98,11 @@ class TransitCalculator:
         # Get positions data
         planets_data = chart_data.get_planets_data_from_chart(chart)
 
+        # Make sure aspect calculator respects the configuration for Ascendant
+        if "Ascendant" not in self.aspect_calculator.selected_planets and planet_name == "Ascendant":
+            # If Ascendant is disabled in aspect config, don't calculate aspects for it
+            self.aspect_calculator.selected_planets = [p for p in self.aspect_calculator.selected_planets if p != "Ascendant"]
+
         # Find the planet we want
         last_planet_data = None
         for planet in planets_data:
