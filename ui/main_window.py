@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QMessageBox, QAction, QMenu
 from PyQt5.QtCore import QThread
+from PyQt5.QtGui import QIcon
 
 from exporters.excel_exporter import ExcelExporter
 from .generator_thread import GeneratorThread
@@ -42,7 +43,12 @@ class KPAstrologyApp(QMainWindow):
         """Initialize the user interface."""
         self.setWindowTitle('KP Astrology Nakshatras Generator')
         self.setGeometry(100, 100, 800, 700)
-
+        
+        # Set application icon
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resources', 'favicon.ico')
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        
         # Create a tab widget
         tab_widget = QTabWidget()
         self.setCentralWidget(tab_widget)

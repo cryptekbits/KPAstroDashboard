@@ -11,7 +11,7 @@ import warnings
 import logging
 from PyQt5.QtWidgets import QApplication, QSplashScreen, QMessageBox
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QIcon
 
 # Filter out specific warnings
 warnings.filterwarnings("ignore", message=".*MapWithoutReturnDtypeWarning.*")
@@ -44,6 +44,11 @@ def main():
     
     # Create application
     app = QApplication(sys.argv)
+    
+    # Set application icon
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'favicon.ico')
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
     
     # Create and show main window
     try:

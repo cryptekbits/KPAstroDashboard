@@ -175,5 +175,4 @@ archive/
 *.xlsx
 config.json
 *.zip
-build.py
 PACKAGING.md
