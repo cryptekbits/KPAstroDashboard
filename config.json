@@ -115,44 +115,9 @@
             "Kala Sarpa Yoga": false
         }
     },
-    "user_defaults": {
-        "location": "Mumbai",
-        "date": "2025-03-02",
-        "time": "09:00",
-        "selected_sheets": [
-            "Planet Positions",
-            "Hora Timing",
-            "Moon",
-            "Sun",
-            "Yogas"
-        ],
-        "yoga": {
-            "start_date": "2025-03-01",
-            "end_date": "2025-03-03",
-            "time_interval": "15 minutes (precise)"
-        },
-        "aspects": {
-            "0": true,
-            "30": false,
-            "60": false,
-            "90": true,
-            "120": false,
-            "150": false,
-            "180": true
-        },
-        "aspect_planets": {
-            "Sun": true,
-            "Moon": true,
-            "Mercury": true,
-            "Venus": true,
-            "Mars": true,
-            "Jupiter": true,
-            "Saturn": true,
-            "Rahu": true,
-            "Ketu": true,
-            "Ascendant": true,
-            "Uranus": false,
-            "Neptune": false
-        }
+    "export_file": {
+        "location": "/Users/cryptek/Desktop",
+        "filename": "KP Panchang.xlsx",
+        "auto_open": true
     }
 }

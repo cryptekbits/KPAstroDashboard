@@ -4,7 +4,7 @@ Configuration tab for the KP Astrology application.
 
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                             QGroupBox, QCheckBox, QGridLayout, QScrollArea,
-                            QTabWidget)
+                            QTabWidget, QLineEdit, QFileDialog)
 import os
 import json
 
@@ -39,6 +39,11 @@ class ConfigTab:
         self.aspects_enabled = None
         self.yoga_enabled = None
         self.yoga_columns = {}
+        
+        # Export file details components
+        self.export_location = None
+        self.export_filename = None
+        self.auto_open_file = None
         
         # Config file path
         self.config_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config.json')
@@ -96,6 +101,10 @@ class ConfigTab:
         # 5. Yoga Configuration Tab
         yoga_tab, self.yoga_enabled, self.yoga_columns = self.yoga_controls.setup_yoga_configuration(None)
         config_sub_tabs.addTab(yoga_tab, "Yogas")
+        
+        # 6. Export File Details Tab
+        export_tab, self.export_location, self.export_filename, self.auto_open_file = self.setup_export_file_configuration()
+        config_sub_tabs.addTab(export_tab, "Export File")
         
         # Save Configuration button
         save_btn = QPushButton("Save Configuration")
@@ -294,6 +303,79 @@ class ConfigTab:
         
         return transit_tab, transit_enabled, transit_columns
 
+    def setup_export_file_configuration(self):
+        """
+        Set up the export file details configuration section.
+        
+        Returns:
+        --------
+        tuple
+            (QWidget, QLineEdit, QLineEdit, QCheckBox)
+            The tab widget, export location input, filename input, and auto-open checkbox
+        """
+        export_tab = QWidget()
+        export_layout = QVBoxLayout(export_tab)
+        
+        # Title
+        title_label = QLabel("Export File Details")
+        title_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        export_layout.addWidget(title_label)
+        
+        # Export Location
+        location_group = QGroupBox("Export Location")
+        location_layout = QHBoxLayout()
+        
+        export_location = QLineEdit()
+        export_location.setPlaceholderText("Default: Current directory")
+        
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(lambda: self._browse_export_location(export_location))
+        
+        location_layout.addWidget(export_location)
+        location_layout.addWidget(browse_btn)
+        location_group.setLayout(location_layout)
+        export_layout.addWidget(location_group)
+        
+        # File Name
+        filename_group = QGroupBox("File Name")
+        filename_layout = QVBoxLayout()
+        
+        export_filename = QLineEdit()
+        export_filename.setPlaceholderText("Default: KP Panchang.xlsx")
+        
+        filename_layout.addWidget(export_filename)
+        filename_group.setLayout(filename_layout)
+        export_layout.addWidget(filename_group)
+        
+        # Auto-open File
+        auto_open_group = QGroupBox("File Opening")
+        auto_open_layout = QVBoxLayout()
+        
+        auto_open_file = QCheckBox("Automatically open file after generation")
+        auto_open_file.setChecked(True)
+        
+        auto_open_layout.addWidget(auto_open_file)
+        auto_open_group.setLayout(auto_open_layout)
+        export_layout.addWidget(auto_open_group)
+        
+        # Add spacer
+        export_layout.addStretch()
+        
+        return export_tab, export_location, export_filename, auto_open_file
+    
+    def _browse_export_location(self, location_input):
+        """
+        Open a file dialog to select export location.
+        
+        Parameters:
+        -----------
+        location_input : QLineEdit
+            The input field to update with selected path
+        """
+        directory = QFileDialog.getExistingDirectory(self.parent, "Select Export Directory")
+        if directory:
+            location_input.setText(directory)
+
     def save_configuration(self):
         """Save the configuration settings to a JSON file."""
         try:
@@ -391,6 +473,16 @@ class ConfigTab:
             # Types (pass to yoga controls)
             if "types" in yoga:
                 self.yoga_controls.load_yoga_config(yoga)
+        
+        # Export file details
+        if "export_file" in config_settings:
+            export_file = config_settings["export_file"]
+            if "location" in export_file:
+                self.export_location.setText(export_file["location"])
+            if "filename" in export_file:
+                self.export_filename.setText(export_file["filename"])
+            if "auto_open" in export_file:
+                self.auto_open_file.setChecked(export_file["auto_open"])
 
     def get_config_settings(self):
         """
@@ -429,6 +521,12 @@ class ConfigTab:
                 "enabled": self.yoga_enabled.isChecked(),
                 "columns": {name: checkbox.isChecked() for name, checkbox in self.yoga_columns.items()},
                 "types": {name: checkbox.isChecked() for name, checkbox in self.yoga_controls.yoga_types.items()}
+            },
+            # Export file details
+            "export_file": {
+                "location": self.export_location.text(),
+                "filename": self.export_filename.text(),
+                "auto_open": self.auto_open_file.isChecked()
             }
         }
         

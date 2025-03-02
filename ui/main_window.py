@@ -274,28 +274,59 @@ class KPAstrologyApp(QMainWindow):
             Dictionary of sheet names to dataframes
         """
         try:
-            # Create filename
+            # Get export file settings from configuration
+            export_settings = {}
+            try:
+                with open(self.config_tab.config_file, 'r') as f:
+                    config = json.load(f)
+                    if 'export_file' in config:
+                        export_settings = config['export_file']
+            except Exception as e:
+                logging.warning(f"Failed to load export settings: {str(e)}")
+                export_settings = {}
+            
+            # Get filename from settings or use default
             filename = "KP Panchang.xlsx"
-            logging.info(f"Exporting data to {filename}")
-
+            if 'filename' in export_settings and export_settings['filename'].strip():
+                filename = export_settings['filename']
+                if not filename.endswith('.xlsx'):
+                    filename += '.xlsx'
+            
+            # Get export location from settings or use current directory
+            export_location = ""
+            if 'location' in export_settings and export_settings['location'].strip():
+                export_location = export_settings['location']
+                if not os.path.exists(export_location):
+                    os.makedirs(export_location, exist_ok=True)
+            
+            # Combine path and filename
+            filepath = os.path.join(export_location, filename) if export_location else filename
+            
+            logging.info(f"Exporting data to {filepath}")
             self.main_tab.status_label.setText("Exporting to Excel...")
 
             # Export to Excel
             exporter = ExcelExporter()
-            exporter.export_to_excel(results, filename)
+            exporter.export_to_excel(results, filepath)
             logging.info("Excel export completed successfully")
 
             self.main_tab.status_label.setText("Export complete!")
 
             # Show success message
             QMessageBox.information(self, "Export Complete",
-                                    f"Data has been exported to {filename}")
+                                    f"Data has been exported to {filepath}")
 
-            # Automatically open the Excel file
-            if open_excel_file(filename):
-                logging.info(f"Successfully opened {filename}")
-            else:
-                logging.warning(f"Failed to open {filename}")
+            # Check if auto-open is enabled in settings
+            auto_open = True  # Default to true
+            if 'auto_open' in export_settings:
+                auto_open = export_settings['auto_open']
+            
+            # Automatically open the Excel file if enabled
+            if auto_open:
+                if open_excel_file(filepath):
+                    logging.info(f"Successfully opened {filepath}")
+                else:
+                    logging.warning(f"Failed to open {filepath}")
 
         except Exception as e:
             error_msg = f"Failed to export to Excel: {str(e)}"
