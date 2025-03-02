@@ -140,6 +140,9 @@ class KPAstrologyApp(QMainWindow):
         # Quick date range buttons
         quick_range_layout = QHBoxLayout()
 
+        day_btn = QPushButton("1 Day")
+        day_btn.clicked.connect(lambda: self.set_yoga_date_range(1))
+
         month_btn = QPushButton("1 Month")
         month_btn.clicked.connect(lambda: self.set_yoga_date_range(30))
 
@@ -152,6 +155,7 @@ class KPAstrologyApp(QMainWindow):
         year_btn = QPushButton("1 Year")
         year_btn.clicked.connect(lambda: self.set_yoga_date_range(365))
 
+        quick_range_layout.addWidget(day_btn)
         quick_range_layout.addWidget(month_btn)
         quick_range_layout.addWidget(quarter_btn)
         quick_range_layout.addWidget(half_year_btn)
@@ -339,16 +343,27 @@ class KPAstrologyApp(QMainWindow):
         days : int
             Number of days to set the range for
         """
-        # Get the current date
-        current_date = QDate.currentDate()
+        if days == 1:
+            # For 1 Day option, use the date selected in the main date picker
+            # but expand the range to include the previous and next day to catch yogas that span days
+            selected_date = self.date_picker.date()
+            
+            # Set start date to the beginning of the previous day
+            self.yoga_start_date.setDate(selected_date.addDays(-1))
+            
+            # Set end date to the end of the next day
+            self.yoga_end_date.setDate(selected_date.addDays(1))
+        else:
+            # Get the current date
+            current_date = QDate.currentDate()
 
-        # Calculate half the days before and half after
-        days_before = days // 3
-        days_after = days - days_before
+            # Calculate half the days before and half after
+            days_before = days // 3
+            days_after = days - days_before
 
-        # Set the start and end dates
-        self.yoga_start_date.setDate(current_date.addDays(-days_before))
-        self.yoga_end_date.setDate(current_date.addDays(days_after))
+            # Set the start and end dates
+            self.yoga_start_date.setDate(current_date.addDays(-days_before))
+            self.yoga_end_date.setDate(current_date.addDays(days_after))
 
     def select_all_sheets(self):
         """Select all sheet checkboxes."""
@@ -534,10 +549,13 @@ class KPAstrologyApp(QMainWindow):
                 yoga_settings = {
                     "start_date": start_dt_yoga,
                     "end_date": end_dt_yoga,
-                    "time_interval": self.yoga_time_interval.currentData()
+                    "time_interval": self.yoga_time_interval.currentData(),
+                    "is_one_day": self.yoga_start_date.date().addDays(1) == self.yoga_end_date.date().addDays(-1)
                 }
                 logging.info(f"Yoga calculation range: {start_dt_yoga.date()} to {end_dt_yoga.date()}")
                 logging.info(f"Yoga time interval: {self.yoga_time_interval.currentData()} hour(s)")
+                if yoga_settings["is_one_day"]:
+                    logging.info(f"Showing yogas for a single day: {self.yoga_start_date.date().addDays(1).toString('yyyy-MM-dd')}")
 
             # Disable UI during generation
             self.generate_btn.setEnabled(False)
@@ -548,11 +566,13 @@ class KPAstrologyApp(QMainWindow):
             logging.info("Starting generator thread")
             self.generator_thread = GeneratorThread(
                 location,
-                start_dt,
+                self.date_picker.date(),
+                self.time_picker.time(),
                 selected_sheets,
-                selected_aspects,
+                excel_file,
                 selected_aspect_planets,
-                yoga_settings
+                yoga_settings,
+                self.date_picker.date()  # Pass the selected date for 1-day yoga calculations
             )
             self.generator_thread.progress_signal.connect(self.update_progress)
             self.generator_thread.finished_signal.connect(self.export_to_excel)

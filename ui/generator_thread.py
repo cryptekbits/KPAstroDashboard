@@ -6,6 +6,7 @@ import logging
 import traceback
 from datetime import datetime
 from PyQt5.QtCore import QThread, pyqtSignal
+import pandas as pd
 
 from data_generators.kp_data_generator import KPDataGenerator
 
@@ -18,33 +19,39 @@ class GeneratorThread(QThread):
     finished_signal = pyqtSignal(dict)
     error_signal = pyqtSignal(str)
 
-    def __init__(self, location, start_datetime, sheets_to_generate, selected_aspects,
-                 aspect_planets, yoga_settings=None):
+    def __init__(self, location, date, time, sheets_to_generate, output_file,
+                 aspect_planets, yoga_settings=None, selected_date=None):
         """
         Initialize the generator thread.
 
         Parameters:
         -----------
-        location : str
-            The location for calculations
-        start_datetime : datetime
-            The main date and time for calculations
+        location : dict
+            Dictionary with location information (name, latitude, longitude, timezone)
+        date : QDate
+            The main date for calculations
+        time : QTime
+            The main time for calculations
         sheets_to_generate : list
             List of sheet names to generate
-        selected_aspects : list
-            List of aspect angles to calculate
+        output_file : str
+            Path to the output Excel file
         aspect_planets : list
             List of planets to include in aspect calculations
         yoga_settings : dict, optional
-            Settings for yoga calculations including date range
+            Settings for yoga calculations (start_date, end_date, time_interval)
+        selected_date : QDate, optional
+            The selected date from the main date picker (used for 1-day yoga calculations)
         """
         super().__init__()
         self.location = location
-        self.start_datetime = start_datetime
+        self.date = date
+        self.time = time
         self.sheets_to_generate = sheets_to_generate
-        self.selected_aspects = selected_aspects
+        self.output_file = output_file
         self.aspect_planets = aspect_planets
         self.yoga_settings = yoga_settings
+        self.selected_date = selected_date
 
     def run(self):
         try:
@@ -75,23 +82,37 @@ class GeneratorThread(QThread):
             )
 
             # Set the selected aspects and aspect planets in the generator
-            generator.aspect_calculator.set_selected_aspects(self.selected_aspects)
             generator.aspect_calculator.set_selected_planets(self.aspect_planets)
 
+            # Convert QDate and QTime to Python datetime
+            py_date = datetime(
+                self.date.year(),
+                self.date.month(),
+                self.date.day(),
+                self.time.hour(),
+                self.time.minute(),
+                self.time.second()
+            )
+            
             # Define end date time (11:55 PM on the same day)
-            end_datetime = self.start_datetime.replace(hour=23, minute=55, second=0)
+            end_datetime = datetime(
+                self.date.year(),
+                self.date.month(),
+                self.date.day(),
+                23, 55, 0
+            )
 
             results = {}
 
             # Planet positions sheet
             if "Planet Positions" in self.sheets_to_generate:
                 self.progress_signal.emit(10, "Generating Planet Positions...")
-                results["Planet Positions"] = generator.get_planet_positions(self.start_datetime)
+                results["Planet Positions"] = generator.get_planet_positions(py_date)
 
             # Hora timing sheet
             if "Hora Timing" in self.sheets_to_generate:
                 self.progress_signal.emit(15, "Generating Hora Timing...")
-                results["Hora Timing"] = generator.get_hora_timings(self.start_datetime, end_datetime)
+                results["Hora Timing"] = generator.get_hora_timings(py_date, end_datetime)
 
             # Planets data
             planets = [
@@ -110,7 +131,7 @@ class GeneratorThread(QThread):
                 if planet in self.sheets_to_generate:
                     self.progress_signal.emit(current_progress, f"Generating {planet} data...")
                     results[planet] = generator.get_planet_transitions(
-                        planet, self.start_datetime, end_datetime
+                        planet, py_date, end_datetime
                     )
                     current_progress += transition_progress_per_item
                     self.progress_signal.emit(current_progress, f"Completed {planet} data")
@@ -139,6 +160,44 @@ class GeneratorThread(QThread):
                     progress_callback=yoga_progress_callback,
                     time_interval=self.yoga_settings.get("time_interval", 1)
                 )
+
+                # If this is a 1-day calculation, filter to show only yogas active on the selected day
+                if self.yoga_settings.get("is_one_day", False) and self.selected_date:
+                    # Get the selected day
+                    selected_date = self.selected_date
+                    
+                    # Convert selected date to string format used in the DataFrame
+                    selected_date_str = selected_date.toString("dd/MM/yy")
+                    
+                    # Filter yogas that are active during the selected day
+                    # A yoga is active on the selected day if:
+                    # 1. It starts on or before the selected day AND
+                    # 2. It ends on or after the selected day
+                    filtered_yogas = []
+                    
+                    for _, yoga in yoga_df.iterrows():
+                        # Parse dates for comparison
+                        start_date = datetime.strptime(yoga["Start Date"], "%d/%m/%y").date()
+                        end_date = datetime.strptime(yoga["End Date"], "%d/%m/%y").date()
+                        
+                        # Convert selected_date to datetime.date for comparison
+                        py_selected_date = selected_date.toPyDate()
+                        
+                        # Check if the yoga is active on the selected day
+                        if start_date <= py_selected_date and end_date >= py_selected_date:
+                            filtered_yogas.append(yoga)
+                    
+                    # Create a new DataFrame with only the filtered yogas
+                    if filtered_yogas:
+                        yoga_df = pd.DataFrame(filtered_yogas)
+                    else:
+                        # If no yogas are active on the selected day, create an empty DataFrame with the same columns
+                        yoga_df = pd.DataFrame(columns=yoga_df.columns)
+                    
+                    self.progress_signal.emit(
+                        int(current_progress + 5),
+                        f"Found {len(yoga_df)} yogas active on {selected_date_str}"
+                    )
 
                 # Store the yoga data in results
                 results["Yogas"] = yoga_df

@@ -614,4 +614,4 @@ class KPDataGenerator:
         str
             Formatted planet information
         """
-        return ", ".join(planets_info)
+        return "\n".join(planets_info)
