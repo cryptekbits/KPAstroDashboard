@@ -83,9 +83,17 @@ def main():
     # Build for the current platform
     return main_build(args)
 
-def create_windows_installer(output_name, version):
+def create_windows_installer(output_name, version, is_onefile=True):
     """Create a Windows installer using NSIS"""
     print("Creating Windows installer with NSIS...")
+    
+    # Determine the file or directory to include based on build mode
+    if is_onefile:
+        file_command = f'File "dist\\{output_name}.exe"'
+        exe_path = f"$INSTDIR\\{output_name}.exe"
+    else:
+        file_command = f'File /r "dist\\{output_name}\\*.*"'
+        exe_path = f"$INSTDIR\\{output_name}.exe"
     
     # Create NSIS script
     nsis_script = f"""
@@ -107,12 +115,12 @@ def create_windows_installer(output_name, version):
     
     Section "Install"
         SetOutPath "$INSTDIR"
-        File /r "dist\\{output_name}\\*.*"
+        {file_command}
         
         # Create shortcut
         CreateDirectory "$SMPROGRAMS\\KP Astrology Dashboard"
-        CreateShortcut "$SMPROGRAMS\\KP Astrology Dashboard\\KP Astrology Dashboard.lnk" "$INSTDIR\\{output_name}.exe"
-        CreateShortcut "$DESKTOP\\KP Astrology Dashboard.lnk" "$INSTDIR\\{output_name}.exe"
+        CreateShortcut "$SMPROGRAMS\\KP Astrology Dashboard\\KP Astrology Dashboard.lnk" "{exe_path}"
+        CreateShortcut "$DESKTOP\\KP Astrology Dashboard.lnk" "{exe_path}"
         
         # Create uninstaller
         WriteUninstaller "$INSTDIR\\Uninstall.exe"
@@ -783,7 +791,7 @@ def main_build(args):
     
     # Create installer for Windows using NSIS (if installed and not in portable mode)
     if is_windows and shutil.which("makensis") and not args.portable:
-        create_windows_installer(output_name, VERSION)
+        create_windows_installer(output_name, VERSION, args.onefile)
     
     print(f"Build completed successfully. Output in dist/{output_name}")
     
