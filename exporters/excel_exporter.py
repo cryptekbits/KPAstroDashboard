@@ -104,6 +104,20 @@ class ExcelExporter:
         yoga_formats : dict
             Dictionary of formats for each yoga nature
         """
+        # Sort the dataframe by start date in ascending order
+        if 'Start Date' in df.columns:
+            # Convert date strings to datetime objects for proper sorting
+            df['DateObj'] = pd.to_datetime(df['Start Date'], format='%d/%m/%y')
+            df['TimeObj'] = pd.to_datetime(df['Start Time'], format='%I:%M %p').dt.time
+            # Sort by date and then by time
+            df = df.sort_values(['DateObj', 'TimeObj'])
+            df = df.drop(['DateObj', 'TimeObj'], axis=1)
+        elif 'Date' in df.columns:
+            # Backward compatibility with old format
+            df['DateObj'] = pd.to_datetime(df['Date'], format='%d/%m/%y')
+            df = df.sort_values('DateObj')
+            df = df.drop('DateObj', axis=1)
+
         # Write the dataframe to the sheet
         df.to_excel(writer, sheet_name="Yogas", index=False)
         worksheet = writer.sheets["Yogas"]
@@ -128,12 +142,39 @@ class ExcelExporter:
             'text_wrap': True
         })
 
-        # Format the data rows with color based on yoga nature
+        # Standard cell format (without background color)
+        standard_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+
+        # Today's date format (yellow background)
+        today_date_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'bg_color': '#FFFF00'  # Yellow
+        })
+
+        # Get today's date in the same format as in the sheet
+        today_str = datetime.now().strftime("%d/%m/%y")
+
+        # Format the data rows
         for row_num in range(1, len(df) + 1):
             # Get the nature of this yoga for color formatting
             nature = df.iloc[row_num - 1].get('Nature', 'Neutral')
-            row_format = yoga_formats.get(nature, yoga_formats['Neutral'])
-
+            nature_format = yoga_formats.get(nature, yoga_formats['Neutral'])
+            
+            # Check if this row's date is today for both start and end dates
+            start_date = df.iloc[row_num - 1].get('Start Date', '')
+            end_date = df.iloc[row_num - 1].get('End Date', '')
+            date = df.iloc[row_num - 1].get('Date', '')  # For backward compatibility
+            
+            start_is_today = (start_date == today_str)
+            end_is_today = (end_date == today_str)
+            is_today = (date == today_str)  # For backward compatibility
+            
             # Apply format to each cell
             for col_num, col_name in enumerate(df.columns):
                 value = df.iloc[row_num - 1, col_num]
@@ -144,17 +185,38 @@ class ExcelExporter:
                 # Use planets format for Planets column
                 elif col_name == 'Planets':
                     worksheet.write(row_num, col_num, value, planets_format)
-                # Use colored format based on nature for other columns
+                # Use nature format only for Nature column
+                elif col_name == 'Nature':
+                    worksheet.write(row_num, col_num, value, nature_format)
+                # Use today's date format for Date column if it's today
+                elif col_name == 'Start Date' and start_is_today:
+                    worksheet.write(row_num, col_num, value, today_date_format)
+                elif col_name == 'End Date' and end_is_today:
+                    worksheet.write(row_num, col_num, value, today_date_format)
+                elif col_name == 'Date' and is_today:  # For backward compatibility
+                    worksheet.write(row_num, col_num, value, today_date_format)
+                # Use standard format for other columns
                 else:
-                    worksheet.write(row_num, col_num, value, row_format)
+                    worksheet.write(row_num, col_num, value, standard_format)
 
-        # Set column widths
-        worksheet.set_column('A:A', 12)  # Date
-        worksheet.set_column('B:B', 10)  # Time
-        worksheet.set_column('C:C', 20)  # Yoga Name
-        worksheet.set_column('D:D', 40)  # Planets
-        worksheet.set_column('E:E', 12)  # Nature
-        worksheet.set_column('F:F', 60)  # Description
+        # Set column widths - updated for new format with start/end dates
+        if 'Start Date' in df.columns:
+            worksheet.set_column('A:A', 12)  # Start Date
+            worksheet.set_column('B:B', 10)  # Start Time
+            worksheet.set_column('C:C', 12)  # End Date
+            worksheet.set_column('D:D', 10)  # End Time
+            worksheet.set_column('E:E', 25)  # Yoga Name
+            worksheet.set_column('F:F', 40)  # Planets
+            worksheet.set_column('G:G', 12)  # Nature
+            worksheet.set_column('H:H', 60)  # Description
+        else:
+            # Backward compatibility with old format
+            worksheet.set_column('A:A', 12)  # Date
+            worksheet.set_column('B:B', 10)  # Time
+            worksheet.set_column('C:C', 20)  # Yoga Name
+            worksheet.set_column('D:D', 40)  # Planets
+            worksheet.set_column('E:E', 12)  # Nature
+            worksheet.set_column('F:F', 60)  # Description
 
         # Add filter and freeze panes
         worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)

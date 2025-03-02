@@ -159,6 +159,32 @@ class KPAstrologyApp(QMainWindow):
 
         yoga_layout.addLayout(quick_range_layout)
 
+        # Add time interval selection for yoga calculations
+        interval_layout = QHBoxLayout()
+        interval_layout.addWidget(QLabel("Calculate yogas every:"))
+        
+        self.yoga_time_interval = QComboBox()
+        self.yoga_time_interval.addItem("1 minute (highest precision)", 1/60)
+        self.yoga_time_interval.addItem("5 minutes (very precise)", 5/60)
+        self.yoga_time_interval.addItem("15 minutes (precise)", 15/60)
+        self.yoga_time_interval.addItem("30 minutes (balanced)", 30/60)
+        self.yoga_time_interval.addItem("1 hour (standard)", 1)
+        self.yoga_time_interval.setCurrentIndex(2)  # Default to 15 minutes
+        
+        interval_layout.addWidget(self.yoga_time_interval)
+        yoga_layout.addLayout(interval_layout)
+        
+        # Add note about yoga tracking
+        note_label = QLabel("Note: Yogas are tracked by their start and end times, "
+                            "showing when each yoga comes into effect and disappears. "
+                            "A higher precision setting will detect shorter-lived yogas.")
+        note_label.setWordWrap(True)
+        note_label.setStyleSheet("color: #555; font-style: italic;")
+        yoga_layout.addWidget(note_label)
+        
+        # Add some spacing
+        yoga_layout.addSpacing(10)
+
         main_layout.addWidget(yoga_group)
 
         # Sheets selection
@@ -507,9 +533,11 @@ class KPAstrologyApp(QMainWindow):
 
                 yoga_settings = {
                     "start_date": start_dt_yoga,
-                    "end_date": end_dt_yoga
+                    "end_date": end_dt_yoga,
+                    "time_interval": self.yoga_time_interval.currentData()
                 }
                 logging.info(f"Yoga calculation range: {start_dt_yoga.date()} to {end_dt_yoga.date()}")
+                logging.info(f"Yoga time interval: {self.yoga_time_interval.currentData()} hour(s)")
 
             # Disable UI during generation
             self.generate_btn.setEnabled(False)

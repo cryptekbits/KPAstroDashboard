@@ -136,7 +136,8 @@ class GeneratorThread(QThread):
                 yoga_df = generator.calculate_yogas_for_date_range(
                     yoga_start_date,
                     yoga_end_date,
-                    progress_callback=yoga_progress_callback
+                    progress_callback=yoga_progress_callback,
+                    time_interval=self.yoga_settings.get("time_interval", 1)
                 )
 
                 # Store the yoga data in results
