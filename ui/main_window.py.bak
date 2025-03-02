@@ -32,9 +32,6 @@ class KPAstrologyApp(QMainWindow):
         self.generator_thread = None
         
         self.initUI()
-        
-        # Update visibility based on loaded configuration
-        self.update_main_tab_visibility()
 
     def initUI(self):
         """Initialize the user interface."""
@@ -52,6 +49,9 @@ class KPAstrologyApp(QMainWindow):
         # Create and add the configuration tab
         config_tab = self.config_tab.setup_tab()
         tab_widget.addTab(config_tab, "Configuration")
+        
+        # Update visibility based on initial configuration
+        self.update_main_tab_visibility()
 
     def update_main_tab_visibility(self):
         """Update visibility of main tab components based on configuration settings."""
