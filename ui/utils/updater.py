@@ -32,6 +32,28 @@ CURRENT_VERSION = VERSION
 # Keep references to threads to prevent premature garbage collection
 _update_threads = []
 
+def is_frozen():
+    """Check if the application is running as a packaged executable"""
+    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+def get_application_path():
+    """Get the path to the application executable or script"""
+    if is_frozen():
+        # Running as packaged executable
+        if platform.system() == "Windows":
+            return os.path.abspath(sys.executable)
+        elif platform.system() == "Darwin":
+            # For macOS app bundles, we need to go up to the .app directory
+            app_path = os.path.abspath(sys.executable)
+            if ".app/Contents/MacOS/" in app_path:
+                return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(app_path))))
+            return app_path
+        else:
+            return os.path.abspath(sys.executable)
+    else:
+        # Running as script
+        return os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
 class UpdateChecker(QObject):
     """Class to check for updates from GitHub releases"""
     update_available = pyqtSignal(str, str)  # version, download_url
@@ -170,9 +192,16 @@ class UpdateDownloader(QObject):
     
     def _create_windows_updater(self, download_path):
         """Create a batch script to update the application on Windows"""
-        app_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        app_path = get_application_path()
+        app_dir = os.path.dirname(app_path) if is_frozen() else os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         temp_dir = tempfile.gettempdir()
         extract_dir = os.path.join(temp_dir, "kp_dashboard_update")
+        
+        # Get the executable name if running as frozen app
+        if is_frozen():
+            exe_name = os.path.basename(app_path)
+        else:
+            exe_name = "main.py"
         
         # Create batch file to:
         # 1. Wait for the application to exit
@@ -198,7 +227,8 @@ rmdir /S /Q "{extract_dir}"
 del "{download_path}"
 
 echo Starting application...
-start "" "{app_dir}\\main.py"
+cd "{app_dir}"
+start "" "{os.path.join(app_dir, exe_name)}"
 
 del "%~f0"
 """)
@@ -211,9 +241,22 @@ del "%~f0"
     
     def _create_unix_updater(self, download_path):
         """Create a shell script to update the application on macOS/Linux"""
-        app_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        app_path = get_application_path()
+        app_dir = os.path.dirname(app_path) if is_frozen() else os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         temp_dir = tempfile.gettempdir()
         extract_dir = os.path.join(temp_dir, "kp_dashboard_update")
+        
+        # Get the executable name or command to start the app
+        if is_frozen():
+            if platform.system() == "Darwin" and ".app" in app_path:
+                # For macOS app bundles
+                start_cmd = f"open \"{app_path}\""
+            else:
+                # For Linux or macOS command line executable
+                start_cmd = f"\"{app_path}\""
+        else:
+            # For running as a script
+            start_cmd = f"cd \"{app_dir}\" && python3 main.py"
         
         # Create shell script to:
         # 1. Wait for the application to exit
@@ -240,8 +283,7 @@ rm -rf "{extract_dir}"
 rm "{download_path}"
 
 echo "Starting application..."
-cd "{app_dir}"
-python3 main.py &
+{start_cmd} &
 
 rm "$0"
 """)
@@ -250,7 +292,7 @@ rm "$0"
         os.chmod(updater_path, 0o755)
         
         # Run the updater
-        subprocess.Popen(["bash", updater_path])
+        subprocess.Popen(["/bin/bash", updater_path])
         
         # Exit the application
         sys.exit(0)
