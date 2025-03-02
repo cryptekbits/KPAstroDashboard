@@ -1,14 +1,9 @@
 from datetime import datetime, timedelta
 import pytz
 import pandas as pd
-import os
-import sys
 
-# Add the project root directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from kpTools.VedicAstro import VedicHoroscopeData
-from kpTools.utils import dms_to_decdeg
+from astro_engine.core import VedicHoroscopeData
+from astro_engine.utils import dms_to_decdeg
 from calculations.aspect_calculator import AspectCalculator
 from calculations.hora_calculator import HoraCalculator
 from calculations.position_calculator import PlanetPositionCalculator
