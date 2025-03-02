@@ -7,6 +7,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                             QComboBox, QDateEdit, QTimeEdit, QCompleter,
                             QProgressBar)
 from PyQt5.QtCore import Qt, QDate, QTime
+import json
+import os
+import logging
 
 from ui.components.yoga_controls import YogaControls
 from ui.components.aspect_controls import AspectControls
@@ -124,9 +127,22 @@ class MainTab:
         location_layout = QHBoxLayout()
         location_group.setLayout(location_layout)
 
+        # Create location dropdown
         self.location_combo = QComboBox()
-        self.location_combo.setObjectName("location_combo")
-        locations = ["Mumbai", "Delhi", "Chennai", "Kolkata", "New York", "London"]
+        self.location_combo.setEditable(True)  # Make the combo box editable to work with QCompleter
+        
+        # Load locations from file
+        locations = []
+        try:
+            locations_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                                         'data_generators', 'locations.json')
+            with open(locations_file, 'r') as f:
+                locations_data = json.load(f)
+                locations = [loc["name"] for loc in locations_data]
+        except Exception as e:
+            logging.error(f"Failed to load locations: {str(e)}")
+            locations = ["Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata"]
+
         self.location_combo.addItems(locations)
         self.location_combo.setCurrentText("Mumbai")
 

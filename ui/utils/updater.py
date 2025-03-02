@@ -29,6 +29,9 @@ GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO
 # Current version
 CURRENT_VERSION = VERSION
 
+# Keep references to threads to prevent premature garbage collection
+_update_threads = []
+
 class UpdateChecker(QObject):
     """Class to check for updates from GitHub releases"""
     update_available = pyqtSignal(str, str)  # version, download_url
@@ -64,7 +67,7 @@ class UpdateChecker(QObject):
                 self.error_occurred.emit("No suitable download found in the latest release")
                 return
                 
-            # Compare versions (simple string comparison - you might want a more robust version comparison)
+            # Compare versions
             if self._is_newer_version(latest_version, CURRENT_VERSION):
                 self.logger.info(f"New version available: {latest_version}")
                 self.update_available.emit(latest_version, download_url)
@@ -276,10 +279,23 @@ def check_for_updates_on_startup(parent_window):
     update_checker.update_not_available.connect(update_thread.quit)
     update_checker.error_occurred.connect(update_thread.quit)
     
-    update_thread.finished.connect(update_thread.deleteLater)
+    # Make sure the thread and checker are not garbage collected
+    _update_threads.append((update_thread, update_checker))
+    
+    # Connect thread finished to cleanup
+    update_thread.finished.connect(lambda: _cleanup_thread(update_thread, update_checker))
     
     # Start the thread
     update_thread.start()
+
+
+def _cleanup_thread(thread, obj):
+    """Clean up thread and object references when thread is finished"""
+    # Remove from the global list to allow garbage collection
+    for i, (t, o) in enumerate(_update_threads):
+        if t == thread and o == obj:
+            _update_threads.pop(i)
+            break
 
 
 def show_update_dialog(parent_window, version, download_url):
@@ -325,6 +341,9 @@ def download_and_install_update(parent_window, download_url):
     downloader = UpdateDownloader()
     downloader.moveToThread(download_thread)
     
+    # Keep references to prevent garbage collection
+    _update_threads.append((download_thread, downloader))
+    
     # Connect signals
     progress.canceled.connect(download_thread.quit)
     
@@ -338,7 +357,7 @@ def download_and_install_update(parent_window, download_url):
     downloader.update_error.connect(lambda error: handle_update_error(parent_window, error, progress))
     
     # Clean up when done
-    download_thread.finished.connect(download_thread.deleteLater)
+    download_thread.finished.connect(lambda: _cleanup_thread(download_thread, downloader))
     
     # Start the thread
     download_thread.start()
