@@ -30,7 +30,13 @@ jobs:
       
     - name: Build Windows executable
       run: |
-        python build.py --target-platform windows --target-arch x64 --onefile --portable --clean
+        # Build with specific name KPDashboard.exe
+        python build.py --target-platform windows --target-arch x64 --onefile --portable --clean --name KPDashboard
+      
+    - name: List build artifacts
+      run: |
+        echo "Contents of dist directory:"
+        dir dist
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -39,6 +45,7 @@ jobs:
         path: |
           dist/*.exe
           dist/KPAstrologyDashboard-*.zip
+          dist/KPDashboard.exe
         retention-days: 7
   
   build-macos-universal:
@@ -68,8 +75,8 @@ jobs:
       
     - name: Build macOS Universal executable
       run: |
-        # Force native build instead of cross-compilation
-        python build.py --target-platform macos --target-arch auto --onefile --portable --clean
+        # Build with specific name KPDashboard
+        python build.py --target-platform macos --target-arch auto --portable --clean --name KPDashboard
       
     - name: List build artifacts
       run: |
@@ -88,7 +95,8 @@ jobs:
   create-release:
     name: Create Release
     needs: [build-windows, build-macos-universal]
-    if: startsWith(github.ref, 'refs/tags/')
+    # Run this job on both tag pushes and workflow_dispatch (manual triggers)
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     
     steps:
@@ -96,6 +104,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history and tags for generating release notes
+      
+      - name: Debug ref name
+        run: |
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
           
       - name: Download all workflow artifacts
         uses: actions/download-artifact@v4
@@ -110,16 +123,30 @@ jobs:
           # List what we've collected
           echo "Contents of release-artifacts directory:"
           ls -la release-artifacts/
+      
+      # For workflow_dispatch, create a draft release with the current date    
+      - name: Get current date
+        if: github.event_name == 'workflow_dispatch'
+        id: date
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
           
-      - name: Extract version from tag
+      - name: Extract version from tag or use date
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "IS_DRAFT=false" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=build-${{ steps.date.outputs.DATE }}" >> $GITHUB_OUTPUT
+            echo "IS_DRAFT=true" >> $GITHUB_OUTPUT
+          fi
           
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: KP Astrology Dashboard ${{ steps.get_version.outputs.VERSION }}
-          draft: false
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.get_version.outputs.VERSION }}
+          draft: ${{ steps.get_version.outputs.IS_DRAFT }}
           prerelease: false
           generate_release_notes: true  # Automatically generate notes based on commits
           files: |
