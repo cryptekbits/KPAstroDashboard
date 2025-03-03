@@ -1,4 +1,4 @@
-name: Build Cross-Platform Applications
+name: build
 
 on:
   push:
@@ -30,8 +30,7 @@ jobs:
       
     - name: Build Windows executable
       run: |
-        # Build with specific name KPDashboard.exe
-        python build.py --target-platform windows --target-arch x64 --onefile --portable --clean --name KPDashboard
+        python build.py --target-platform windows --target-arch x64 --onefile --portable --clean
       
     - name: List build artifacts
       run: |
@@ -45,7 +44,6 @@ jobs:
         path: |
           dist/*.exe
           dist/KPAstrologyDashboard-*.zip
-          dist/KPDashboard.exe
         retention-days: 7
   
   build-macos-universal:
@@ -75,8 +73,7 @@ jobs:
       
     - name: Build macOS Universal executable
       run: |
-        # Build with specific name KPDashboard
-        python build.py --target-platform macos --target-arch auto --portable --clean --name KPDashboard
+        python build.py --target-platform macos --target-arch auto --portable --clean
       
     - name: List build artifacts
       run: |
