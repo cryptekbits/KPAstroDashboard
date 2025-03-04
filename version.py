@@ -4,9 +4,9 @@ This file is updated with each release.
 """
 
 # Version information
-VERSION = "1.0.6"
-VERSION_NAME = "Alpha Release (Stable)"
-BUILD_DATE = "2025-03-03"
+VERSION = "1.0.7"
+VERSION_NAME = "AI 1.0.7 - Alpha"
+BUILD_DATE = "2025-03-04"
 
 # GitHub repository information
 GITHUB_REPO_OWNER = "cryptekbits"  # Replace with actual GitHub username
