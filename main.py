@@ -9,6 +9,10 @@ import sys
 import os
 import warnings
 import logging
+
+# Set environment variable to skip polars CPU check to avoid compatibility issues
+os.environ["POLARS_SKIP_CPU_CHECK"] = "1"
+
 from PyQt5.QtWidgets import QApplication, QSplashScreen, QMessageBox
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QIcon
@@ -16,6 +20,8 @@ from PyQt5.QtGui import QPixmap, QIcon
 # Filter out specific warnings
 warnings.filterwarnings("ignore", message=".*MapWithoutReturnDtypeWarning.*")
 warnings.filterwarnings("ignore", message=".*Calling `map_elements` without specifying `return_dtype`.*")
+# Also ignore polars CPU feature warnings
+warnings.filterwarnings("ignore", message=".*Missing required CPU features.*")
 
 # Import after warnings are filtered
 from ui import KPAstrologyApp, setup_logging

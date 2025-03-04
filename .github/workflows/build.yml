@@ -91,6 +91,8 @@ jobs:
     - name: Build Windows executable
       run: |
         python build.py --target-platform windows --target-arch x64 --onefile --portable --clean --no-zip
+      env:
+        POLARS_SKIP_CPU_CHECK: 1
       
     - name: List build artifacts
       run: |
@@ -258,7 +260,13 @@ jobs:
           
           # Windows executable
           echo "Preparing Windows executable..."
-          find all-artifacts/windows-exe -name "*.exe" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.exe \; || echo "No Windows executable found"
+          # Unzip the Windows executable artifact first
+          find all-artifacts/windows-exe -name "*.zip" -type f -exec unzip -j {} -d windows-extracted \; || echo "No Windows executable zip found"
+          # Then copy the extracted exe to the release artifacts
+          find windows-extracted -name "*.exe" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.exe \; || {
+            # Fallback to direct search in case it wasn't zipped
+            find all-artifacts/windows-exe -name "*.exe" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.exe \;
+          } || echo "No Windows executable found"
           
           # macOS DMG (preferred distribution format for macOS apps)
           echo "Preparing macOS DMG..."
