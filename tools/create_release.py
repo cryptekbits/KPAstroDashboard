@@ -380,11 +380,7 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         
         # Expected artifact patterns
         windows_exe_pattern = "**/*.exe"
-        windows_zip_pattern = "**/AstroInsight-Windows.zip"
-        macos_app_pattern = "**/*.app"
         macos_dmg_pattern = "**/AstroInsight-macOS.dmg"
-        macos_zip_pattern = "**/AstroInsight-macOS.zip"
-        macos_tar_pattern = "**/AstroInsight-macOS.tar.gz"
         source_zip_pattern = "**/SourceCode.zip"
         
         # Find and rename artifacts to match expected naming convention
@@ -401,17 +397,6 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         else:
             print("No Windows executable found")
         
-        # Windows ZIP
-        windows_zips = list(artifacts_dir.glob(windows_zip_pattern))
-        if windows_zips:
-            windows_zip = windows_zips[0]
-            new_name = artifacts_dir / f"{APP_NAME}-{version}-Windows.zip"
-            shutil.copy(windows_zip, new_name)
-            renamed_artifacts.append(new_name)
-            print(f"Prepared Windows ZIP: {new_name.name}")
-        else:
-            print("No Windows ZIP found")
-        
         # macOS DMG (preferred format)
         macos_dmgs = list(artifacts_dir.glob(macos_dmg_pattern))
         if macos_dmgs:
@@ -422,45 +407,6 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             print(f"Prepared macOS DMG: {new_name.name}")
         else:
             print("No macOS DMG found")
-        
-        # macOS app bundle - directly available
-        macos_apps = list(Path(artifacts_dir).glob(macos_app_pattern))
-        if macos_apps:
-            macos_app = macos_apps[0]
-            if macos_app.is_dir():
-                # Since we can't include the .app directory directly in GitHub releases,
-                # we need to package it somehow. The DMG is already our preferred format,
-                # but we'll check if we need a fallback
-                if not macos_dmgs:
-                    print("No macOS DMG found, but .app bundle is available.")
-                    print("Note: macOS .app bundles are directories and need to be packaged for a GitHub release.")
-                    print("The app bundle is available in the artifacts, but cannot be directly included in the release.")
-            else:
-                print(f"Found macOS app but it's not a directory: {macos_app}")
-        else:
-            print("No macOS app bundle found")
-        
-        # macOS ZIP
-        macos_zips = list(artifacts_dir.glob(macos_zip_pattern))
-        if macos_zips:
-            macos_zip = macos_zips[0]
-            new_name = artifacts_dir / f"{APP_NAME}-{version}-macOS.zip"
-            shutil.copy(macos_zip, new_name)
-            renamed_artifacts.append(new_name)
-            print(f"Prepared macOS ZIP: {new_name.name}")
-        else:
-            print("No macOS ZIP found")
-        
-        # macOS TAR.GZ
-        macos_tars = list(artifacts_dir.glob(macos_tar_pattern))
-        if macos_tars:
-            macos_tar = macos_tars[0]
-            new_name = artifacts_dir / f"{APP_NAME}-{version}-macOS.tar.gz"
-            shutil.copy(macos_tar, new_name)
-            renamed_artifacts.append(new_name)
-            print(f"Prepared macOS TAR.GZ: {new_name.name}")
-        else:
-            print("No macOS TAR.GZ found")
         
         # Source code ZIP
         source_zips = list(artifacts_dir.glob(source_zip_pattern))
@@ -531,8 +477,8 @@ def create_github_release(version):
                         print(f"  - {artifact.name}")
                     
                     print("\nDistribution formats:")
-                    print(f"  - For Windows users: {APP_NAME}-{version}.exe or {APP_NAME}-{version}-Windows.zip")
-                    print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred) or {APP_NAME}-{version}-macOS.zip")
+                    print(f"  - For Windows users: {APP_NAME}-{version}.exe")
+                    print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred)")
                     print("Note: The .dmg file is the standard distribution format for macOS applications.")
                     
                     for artifact in artifacts:
@@ -572,8 +518,8 @@ def create_github_release(version):
             print(f"  - {artifact.name}")
         
         print("\nDistribution formats:")
-        print(f"  - For Windows users: {APP_NAME}-{version}.exe or {APP_NAME}-{version}-Windows.zip")
-        print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred) or {APP_NAME}-{version}-macOS.zip")
+        print(f"  - For Windows users: {APP_NAME}-{version}.exe")
+        print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred)")
         print("Note: The .dmg file is the standard distribution format for macOS applications.")
     
     try:

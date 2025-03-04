@@ -689,6 +689,38 @@ def main_build(args):
         "--add-data", f"data_generators/locations.json{os.pathsep}data_generators",
     ])
     
+    # Add flatlib data files
+    try:
+        import flatlib
+        flatlib_path = os.path.dirname(flatlib.__file__)
+        cmd.extend([
+            "--add-data", f"{flatlib_path}{os.pathsep}flatlib",
+        ])
+        print(f"Added flatlib data files from {flatlib_path}")
+        
+        # Create a runtime hook for flatlib
+        hook_dir = os.path.join(os.getcwd(), "build", "hooks")
+        os.makedirs(hook_dir, exist_ok=True)
+        
+        with open(os.path.join(hook_dir, "hook-flatlib.py"), "w") as f:
+            f.write("""
+# PyInstaller hook for flatlib
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+# Collect all submodules
+hiddenimports = collect_submodules('flatlib')
+
+# Collect all data files
+datas = collect_data_files('flatlib')
+""")
+        
+        cmd.extend([
+            "--additional-hooks-dir", hook_dir,
+        ])
+        print(f"Created runtime hook for flatlib in {hook_dir}")
+    except ImportError:
+        print("Warning: Could not import flatlib to add its data files")
+    
     # Look for additional data files that might be needed
     print("Scanning for additional data files...")
     for root, dirs, files in os.walk("."):
@@ -734,6 +766,12 @@ def main_build(args):
         "--hidden-import", "geopy",
         "--hidden-import", "polars",
         "--hidden-import", "flatlib",
+        "--hidden-import", "flatlib.const",
+        "--hidden-import", "flatlib.chart",
+        "--hidden-import", "flatlib.geopos",
+        "--hidden-import", "flatlib.datetime",
+        "--hidden-import", "flatlib.object",
+        "--hidden-import", "flatlib.aspects",
         "--hidden-import", "tabulate",
         "--hidden-import", "psutil",
         "--hidden-import", "ephem",
@@ -765,8 +803,8 @@ def main_build(args):
         # Create ZIP archive only if explicitly requested and not disabled
         if args.zip and not args.no_zip:
             create_zip_archive(output_name, is_macos)
-        elif args.no_zip:
-            print("Skipping ZIP archive creation as requested with --no-zip")
+        else:
+            print("Skipping ZIP archive creation")
         
         return 0
     

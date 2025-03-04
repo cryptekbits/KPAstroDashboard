@@ -276,20 +276,6 @@ jobs:
           echo "Preparing source code ZIP..."
           find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/SourceCode-${VERSION}.zip \; || echo "No source code ZIP found"
           
-          # Create a README explaining how to use the macOS app
-          echo "# Installing AstroInsight on macOS" > release-artifacts/macOS-README.md
-          echo "" >> release-artifacts/macOS-README.md
-          echo "## Installation:" >> release-artifacts/macOS-README.md
-          echo "1. Download the AstroInsight-\${VERSION}.dmg file" >> release-artifacts/macOS-README.md
-          echo "2. Open the DMG file" >> release-artifacts/macOS-README.md
-          echo "3. Drag the AstroInsight app to your Applications folder" >> release-artifacts/macOS-README.md
-          echo "4. Right-click the app and select \"Open\" (required only the first time)" >> release-artifacts/macOS-README.md
-          echo "" >> release-artifacts/macOS-README.md
-          echo "## Note about macOS security:" >> release-artifacts/macOS-README.md
-          echo "When first launching, you may see a security warning. To bypass this:" >> release-artifacts/macOS-README.md
-          echo "1. Go to System Preferences > Security & Privacy" >> release-artifacts/macOS-README.md
-          echo "2. Click \"Open Anyway\" for AstroInsight" >> release-artifacts/macOS-README.md
-          
           # List what we've collected
           echo "Contents of release-artifacts directory:"
           ls -la release-artifacts/
