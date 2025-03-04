@@ -19,6 +19,7 @@ import subprocess
 import re
 import time
 import requests
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -219,7 +220,6 @@ def wait_for_workflow_completion(version, timeout=1800):
             check=True
         )
         
-        import json
         runs = json.loads(result.stdout)
         
         # Filter runs related to our tag
@@ -343,7 +343,6 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             check=True
         )
         
-        import json
         runs = json.loads(result.stdout)
         
         # Filter runs related to our tag that have completed successfully
@@ -363,6 +362,7 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         run_id = tag_runs[0]["databaseId"]
         
         # List artifacts for this run
+        print(f"Downloading artifacts from run ID: {run_id}")
         artifacts_result = subprocess.run(
             ["gh", "run", "download", str(run_id), "--repo", repo_info, "--dir", str(artifacts_dir)],
             cwd=root_dir,
@@ -381,21 +381,26 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         artifact_files = []
         for root, dirs, files in os.walk(artifacts_dir):
             for file in files:
-                artifact_files.append(Path(os.path.join(root, file)))
+                file_path = Path(os.path.join(root, file))
+                artifact_files.append(file_path)
+                print(f"  - {file_path.relative_to(artifacts_dir)}")
         
         print(f"Found {len(artifact_files)} artifact files")
         
         # Expected artifact patterns
-        windows_exe_pattern = "*.exe"
-        windows_zip_pattern = "*Windows*.zip"
-        macos_zip_pattern = "*macOS*.zip"
-        source_zip_pattern = "SourceCode*.zip"
+        windows_exe_pattern = "**/*.exe"
+        windows_zip_pattern = "**/AstroInsight-Windows.zip"
+        macos_app_pattern = "**/*.app"
+        macos_dmg_pattern = "**/AstroInsight-macOS.dmg"
+        macos_zip_pattern = "**/AstroInsight-macOS.zip"
+        macos_tar_pattern = "**/AstroInsight-macOS.tar.gz"
+        source_zip_pattern = "**/SourceCode.zip"
         
         # Find and rename artifacts to match expected naming convention
         renamed_artifacts = []
         
         # Windows executable
-        windows_exes = list(artifacts_dir.glob("**/" + windows_exe_pattern))
+        windows_exes = list(artifacts_dir.glob(windows_exe_pattern))
         if windows_exes:
             windows_exe = windows_exes[0]
             new_name = artifacts_dir / f"{APP_NAME}-{version}.exe"
@@ -406,7 +411,7 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             print("No Windows executable found")
         
         # Windows ZIP
-        windows_zips = list(artifacts_dir.glob("**/" + windows_zip_pattern))
+        windows_zips = list(artifacts_dir.glob(windows_zip_pattern))
         if windows_zips:
             windows_zip = windows_zips[0]
             new_name = artifacts_dir / f"{APP_NAME}-{version}-Windows.zip"
@@ -416,8 +421,36 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         else:
             print("No Windows ZIP found")
         
+        # macOS DMG (preferred format)
+        macos_dmgs = list(artifacts_dir.glob(macos_dmg_pattern))
+        if macos_dmgs:
+            macos_dmg = macos_dmgs[0]
+            new_name = artifacts_dir / f"{APP_NAME}-{version}.dmg"
+            shutil.copy(macos_dmg, new_name)
+            renamed_artifacts.append(new_name)
+            print(f"Prepared macOS DMG: {new_name.name}")
+        else:
+            print("No macOS DMG found")
+        
+        # macOS app bundle - directly available
+        macos_apps = list(Path(artifacts_dir).glob(macos_app_pattern))
+        if macos_apps:
+            macos_app = macos_apps[0]
+            if macos_app.is_dir():
+                # Since we can't include the .app directory directly in GitHub releases,
+                # we need to package it somehow. The DMG is already our preferred format,
+                # but we'll check if we need a fallback
+                if not macos_dmgs:
+                    print("No macOS DMG found, but .app bundle is available.")
+                    print("Note: macOS .app bundles are directories and need to be packaged for a GitHub release.")
+                    print("The app bundle is available in the artifacts, but cannot be directly included in the release.")
+            else:
+                print(f"Found macOS app but it's not a directory: {macos_app}")
+        else:
+            print("No macOS app bundle found")
+        
         # macOS ZIP
-        macos_zips = list(artifacts_dir.glob("**/" + macos_zip_pattern))
+        macos_zips = list(artifacts_dir.glob(macos_zip_pattern))
         if macos_zips:
             macos_zip = macos_zips[0]
             new_name = artifacts_dir / f"{APP_NAME}-{version}-macOS.zip"
@@ -427,8 +460,19 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         else:
             print("No macOS ZIP found")
         
+        # macOS TAR.GZ
+        macos_tars = list(artifacts_dir.glob(macos_tar_pattern))
+        if macos_tars:
+            macos_tar = macos_tars[0]
+            new_name = artifacts_dir / f"{APP_NAME}-{version}-macOS.tar.gz"
+            shutil.copy(macos_tar, new_name)
+            renamed_artifacts.append(new_name)
+            print(f"Prepared macOS TAR.GZ: {new_name.name}")
+        else:
+            print("No macOS TAR.GZ found")
+        
         # Source code ZIP
-        source_zips = list(artifacts_dir.glob("**/" + source_zip_pattern))
+        source_zips = list(artifacts_dir.glob(source_zip_pattern))
         if source_zips:
             source_zip = source_zips[0]
             new_name = artifacts_dir / f"SourceCode-{version}.zip"
@@ -445,6 +489,7 @@ def download_workflow_artifacts(version, repo_info, root_dir):
                 print(f"  - {artifact.relative_to(artifacts_dir)}")
             
             # If we couldn't find any matching artifacts, just return all artifact files
+            print("Returning all artifact files instead.")
             return artifact_files
         
         return renamed_artifacts
@@ -459,6 +504,7 @@ def create_github_release(version):
     """Create a GitHub release with artifacts from GitHub Actions"""
     root_dir = Path(__file__).parent.parent
     tag_name = f"v{version}"
+    artifacts_dir = root_dir / "release_artifacts"
     
     try:
         repo_info = get_repo_info()
@@ -489,6 +535,15 @@ def create_github_release(version):
                 artifacts = download_workflow_artifacts(version, repo_info, root_dir)
                 
                 if artifacts:
+                    print("\nPreparing to upload the following artifacts to GitHub release:")
+                    for artifact in artifacts:
+                        print(f"  - {artifact.name}")
+                    
+                    print("\nDistribution formats:")
+                    print(f"  - For Windows users: {APP_NAME}-{version}.exe or {APP_NAME}-{version}-Windows.zip")
+                    print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred) or {APP_NAME}-{version}-macOS.zip")
+                    print("Note: The .dmg file is the standard distribution format for macOS applications.")
+                    
                     for artifact in artifacts:
                         print(f"Uploading {artifact.name} to release...")
                         upload_result = subprocess.run(
@@ -501,8 +556,6 @@ def create_github_release(version):
                         
                         if upload_result.returncode == 0:
                             print(f"Successfully uploaded {artifact.name}")
-                        else:
-                            print(f"Failed to upload {artifact.name}: {upload_result.stderr}")
                 else:
                     print("No build artifacts found to upload.")
             else:
@@ -516,14 +569,21 @@ def create_github_release(version):
     release_notes = get_release_notes()
     
     # Download build artifacts
+    print("Downloading build artifacts from GitHub Actions...")
     artifacts = download_workflow_artifacts(version, repo_info, root_dir)
     
     if not artifacts:
-        print("No artifacts found. Please check GitHub Actions workflow status.")
-        proceed = input("Do you want to continue creating the release without artifacts? (y/n): ")
-        if proceed.lower() != 'y':
-            print("Aborting release creation.")
-            return False
+        print("No build artifacts found or downloaded. The release will be created without build artifacts.")
+        print("You can manually add the artifacts later by downloading them from the GitHub Actions workflow.")
+    else:
+        print("\nThe following artifacts will be uploaded to the GitHub release:")
+        for artifact in artifacts:
+            print(f"  - {artifact.name}")
+        
+        print("\nDistribution formats:")
+        print(f"  - For Windows users: {APP_NAME}-{version}.exe or {APP_NAME}-{version}-Windows.zip")
+        print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred) or {APP_NAME}-{version}-macOS.zip")
+        print("Note: The .dmg file is the standard distribution format for macOS applications.")
     
     try:
         # Create a GitHub release using GitHub CLI
@@ -550,10 +610,57 @@ def create_github_release(version):
             print(f"Created GitHub release {tag_name} with all artifacts")
             return True
         else:
-            print(f"Error creating GitHub release: {create_result.stderr}")
+            error_message = create_result.stderr.strip()
+            print(f"⚠️ GitHub release failed with status: {create_result.returncode}")
+            print(error_message)
+            
+            # Check if it's a permissions issue (403)
+            if "Resource not accessible by integration" in error_message or "403" in error_message:
+                print("\nPermission error detected: Your GitHub token doesn't have sufficient permissions.")
+                print("\nTo fix this issue, try one of the following solutions:")
+                print("1. Use a Personal Access Token (PAT) with 'repo' scope:")
+                print("   a. Create a PAT at https://github.com/settings/tokens")
+                print("   b. Ensure it has the 'repo' scope")
+                print("   c. Set it as an environment variable: export GH_TOKEN=your_token")
+                print("   d. Run the release script again")
+                print("\n2. If using GitHub Actions:")
+                print("   a. Add permissions to your workflow file:")
+                print("      permissions:")
+                print("        contents: write  # Allows creating releases")
+                print("\n3. Create the release manually via GitHub web interface:")
+                print(f"   a. Go to: https://github.com/{repo_info}/releases/new?tag={tag_name}")
+                print("   b. Copy the release notes and upload the artifacts")
+                
+                # Ask if the user wants to continue with manual upload
+                try:
+                    manual_upload = input("\nWould you like to try creating the release manually? (y/n): ")
+                    if manual_upload.lower() == 'y':
+                        # Open the browser to the release creation page
+                        browser_cmd = None
+                        if sys.platform == 'darwin':  # macOS
+                            browser_cmd = ['open', f'https://github.com/{repo_info}/releases/new?tag={tag_name}']
+                        elif sys.platform == 'win32':  # Windows
+                            browser_cmd = ['start', f'https://github.com/{repo_info}/releases/new?tag={tag_name}']
+                        else:  # Linux
+                            browser_cmd = ['xdg-open', f'https://github.com/{repo_info}/releases/new?tag={tag_name}']
+                        
+                        try:
+                            subprocess.run(browser_cmd)
+                            print("\nOpened release creation page in your browser.")
+                            print("Please copy the release notes and upload the artifacts manually.")
+                            print(f"Local artifacts are available in: {artifacts_dir}")
+                        except Exception as e:
+                            print(f"Could not open browser: {e}")
+                            print(f"Please navigate to: https://github.com/{repo_info}/releases/new?tag={tag_name}")
+                    else:
+                        print("\nPlease fix the token permissions issue and try again.")
+                except KeyboardInterrupt:
+                    print("\nOperation cancelled. Please fix the token permissions issue and try again.")
+                
+                return False
             
             # Check if it's because the release already exists
-            if "already exists" in create_result.stderr:
+            elif "already exists" in error_message:
                 print(f"Release {tag_name} already exists. Trying to upload artifacts...")
                 
                 # Upload build artifacts

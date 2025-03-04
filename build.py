@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--no-icon", action="store_true", help="Do not include an icon in the build")
     parser.add_argument("--portable", action="store_true", help="Create a portable application (no installer)")
     parser.add_argument("--zip", action="store_true", help="Create a ZIP archive of the portable application")
+    parser.add_argument("--no-zip", action="store_true", help="Skip creating a ZIP archive of the application")
     parser.add_argument("--target-platform", choices=["auto", "windows", "macos", "linux"], default="auto", 
                         help="Target platform for the build (default: auto-detect)")
     parser.add_argument("--target-arch", choices=["auto", "x64", "arm64"], default="auto",
@@ -784,8 +785,10 @@ def main_build(args):
         print(f"Portable app created successfully. Output in dist/{output_name}")
         
         # Create ZIP archive if requested
-        if args.zip:
+        if args.zip and not args.no_zip:
             create_zip_archive(output_name, is_macos)
+        elif args.no_zip:
+            print("Skipping ZIP archive creation as requested with --no-zip")
         
         return 0
     

@@ -32,23 +32,28 @@ jobs:
       run: |
         python build.py --target-platform windows --target-arch x64 --onefile --portable --clean
       
-    - name: Create Windows ZIP
-      run: |
-        cd dist
-        powershell Compress-Archive -Path *.exe -DestinationPath AstroInsight-Windows.zip
-      
     - name: List build artifacts
       run: |
         echo "Contents of dist directory:"
         dir dist
       
-    - name: Upload build artifacts
+    - name: Upload Windows executable
       uses: actions/upload-artifact@v4
       with:
-        name: astroinsight-windows
-        path: |
-          dist/*.exe
-          dist/AstroInsight-Windows.zip
+        name: windows-exe
+        path: dist/*.exe
+        retention-days: 7
+
+    - name: Create Windows ZIP
+      run: |
+        cd dist
+        powershell Compress-Archive -Path *.exe -DestinationPath AstroInsight-Windows.zip
+      
+    - name: Upload Windows ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-zip
+        path: dist/AstroInsight-Windows.zip
         retention-days: 7
   
   build-macos:
@@ -76,34 +81,100 @@ jobs:
         echo "Architecture: $(uname -m)"
         python -c "import platform; print(f'Python architecture: {platform.machine()}')"
       
-    - name: Build macOS executable
+    - name: Build macOS application
       run: |
-        python build.py --target-platform macos --target-arch auto --portable --clean
+        python build.py --target-platform macos --target-arch auto --portable --clean --no-zip
       
-    - name: Create macOS ZIP
-      run: |
-        cd dist
-        # Find the .app file and zip it
-        APP_NAME=$(find . -name "*.app" -type d -maxdepth 1 | head -1)
-        if [ -n "$APP_NAME" ]; then
-          zip -r AstroInsight-macOS.zip "$APP_NAME"
-        else
-          echo "No .app file found in dist directory"
-          exit 1
-        fi
-      
-    - name: List build artifacts
+    - name: Check app bundle
       run: |
         echo "Contents of dist directory:"
         ls -la dist/
+        echo "Looking for .app directories:"
+        find dist -name "*.app" -type d
+        echo "Structure of the .app bundle (if found):"
+        APP_PATH=$(find dist -name "*.app" -type d | head -1)
+        if [ -n "$APP_PATH" ]; then
+          echo "Found app bundle: $APP_PATH"
+          ls -la "$APP_PATH"
+          ls -la "$APP_PATH/Contents" || echo "No Contents directory"
+          ls -la "$APP_PATH/Contents/MacOS" || echo "No MacOS directory"
+          # Get the app name for later steps
+          APP_NAME=$(basename "$APP_PATH" .app)
+          echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+        else
+          echo "No .app bundle found!"
+          exit 1
+        fi
+    
+    - name: Create DMG for macOS
+      run: |
+        # Install create-dmg tool
+        brew install create-dmg
+        
+        cd dist
+        APP_PATH=$(find . -name "*.app" -type d | head -1)
+        if [ -n "$APP_PATH" ]; then
+          echo "Creating DMG for $APP_PATH"
+          
+          # Create a DMG file
+          create-dmg \
+            --volname "AstroInsight Installer" \
+            --volicon "$APP_PATH/Contents/Resources/icon-windowed.icns" \
+            --window-pos 200 120 \
+            --window-size 800 500 \
+            --icon-size 100 \
+            --icon "$APP_PATH" 200 190 \
+            --hide-extension "$APP_PATH" \
+            --app-drop-link 600 185 \
+            "AstroInsight-macOS.dmg" \
+            "$APP_PATH" || echo "DMG creation failed, continuing anyway"
+          
+          ls -la AstroInsight-macOS.dmg || echo "DMG not created"
+        else
+          echo "No .app bundle found for DMG creation"
+          exit 1
+        fi
       
-    - name: Upload build artifacts
+    - name: Create macOS Archives
+      run: |
+        cd dist
+        APP_PATH=$(find . -name "*.app" -type d | head -1)
+        if [ -n "$APP_PATH" ]; then
+          echo "Found app bundle: $APP_PATH"
+          
+          # Create a tar archive to preserve permissions and symlinks
+          tar -czf AstroInsight-macOS.tar.gz "$APP_PATH"
+          
+          # Also create a regular zip for compatibility
+          zip -r AstroInsight-macOS.zip "$APP_PATH"
+          
+          ls -la AstroInsight-macOS.tar.gz AstroInsight-macOS.zip AstroInsight-macOS.dmg || true
+        else
+          echo "No .app bundle found in dist directory"
+          exit 1
+        fi
+      
+    - name: Upload macOS app bundle
       uses: actions/upload-artifact@v4
       with:
-        name: astroinsight-macos
+        name: macos-app
+        path: dist/*.app
+        retention-days: 7
+    
+    - name: Upload macOS DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-dmg
+        path: dist/*.dmg
+        retention-days: 7
+      
+    - name: Upload macOS archives
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-archives
         path: |
-          dist/*.app
           dist/AstroInsight-macOS.zip
+          dist/AstroInsight-macOS.tar.gz
         retention-days: 7
 
   create-source-code-zip:
@@ -181,16 +252,43 @@ jobs:
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           
           # Windows executable
-          find all-artifacts/astroinsight-windows -name "*.exe" -type f | head -1 | xargs -I{} cp {} release-artifacts/AstroInsight-${VERSION}.exe || true
+          echo "Preparing Windows executable..."
+          find all-artifacts/windows-exe -name "*.exe" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.exe \; || echo "No Windows executable found"
           
           # Windows ZIP
-          find all-artifacts/astroinsight-windows -name "*.zip" -type f | head -1 | xargs -I{} cp {} release-artifacts/AstroInsight-${VERSION}-Windows.zip || true
+          echo "Preparing Windows ZIP..."
+          find all-artifacts/windows-zip -name "*.zip" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}-Windows.zip \; || echo "No Windows ZIP found"
           
-          # macOS app ZIP
-          find all-artifacts/astroinsight-macos -name "*.zip" -type f | head -1 | xargs -I{} cp {} release-artifacts/AstroInsight-${VERSION}-macOS.zip || true
+          # macOS DMG (preferred distribution format for macOS apps)
+          echo "Preparing macOS DMG..."
+          find all-artifacts/macos-dmg -name "*.dmg" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.dmg \; || echo "No macOS DMG found"
+          
+          # macOS ZIP and TAR.GZ
+          echo "Preparing macOS archives..."
+          find all-artifacts/macos-archives -name "*.zip" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}-macOS.zip \; || echo "No macOS ZIP found"
+          find all-artifacts/macos-archives -name "*.tar.gz" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}-macOS.tar.gz \; || echo "No macOS TAR.GZ found"
+          
+          # Create a README explaining how to use the macOS app
+          echo "# Installing AstroInsight on macOS" > release-artifacts/macOS-README.md
+          echo "" >> release-artifacts/macOS-README.md
+          echo "## Preferred method (DMG):" >> release-artifacts/macOS-README.md
+          echo "1. Download the AstroInsight-\${VERSION}.dmg file" >> release-artifacts/macOS-README.md
+          echo "2. Open the DMG file" >> release-artifacts/macOS-README.md
+          echo "3. Drag the AstroInsight app to your Applications folder" >> release-artifacts/macOS-README.md
+          echo "4. Right-click the app and select \"Open\" (required only the first time)" >> release-artifacts/macOS-README.md
+          echo "" >> release-artifacts/macOS-README.md
+          echo "## Alternative methods:" >> release-artifacts/macOS-README.md
+          echo "- AstroInsight-\${VERSION}-macOS.zip: Extract this ZIP file to get the .app" >> release-artifacts/macOS-README.md
+          echo "- AstroInsight-\${VERSION}-macOS.tar.gz: Use if the ZIP file doesn't preserve permissions correctly" >> release-artifacts/macOS-README.md
+          echo "" >> release-artifacts/macOS-README.md
+          echo "## Note about macOS security:" >> release-artifacts/macOS-README.md
+          echo "When first launching, you may see a security warning. To bypass this:" >> release-artifacts/macOS-README.md
+          echo "1. Go to System Preferences > Security & Privacy" >> release-artifacts/macOS-README.md
+          echo "2. Click \"Open Anyway\" for AstroInsight" >> release-artifacts/macOS-README.md
           
           # Source code ZIP
-          cp all-artifacts/source-code/SourceCode.zip release-artifacts/SourceCode-${VERSION}.zip || true
+          echo "Preparing source code ZIP..."
+          find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/SourceCode-${VERSION}.zip \; || echo "No source code ZIP found"
           
           # List what we've collected
           echo "Contents of release-artifacts directory:"
