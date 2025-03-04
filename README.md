@@ -2,7 +2,7 @@
 
 | Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
 | :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
-| `master` | ![version](https://img.shields.io/badge/version-1.1.3-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
+| `master` | ![version](https://img.shields.io/badge/version-1.1.4-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
 
 # KP Astrology Dashboard
 
