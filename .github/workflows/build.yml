@@ -83,115 +83,6 @@ jobs:
           echo "version=0.0.0" >> $GITHUB_OUTPUT
         fi
 
-  build-windows:
-    needs: check-conditions
-    if: needs.check-conditions.outputs.should_run == 'true'
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-        cache: 'pip'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install py2exe
-        pip install -r requirements.txt
-      
-    - name: Build Windows executable
-      run: |
-        python build_win.py --clean
-      env:
-        POLARS_SKIP_CPU_CHECK: 1
-        CI_VERSION: ${{ needs.check-conditions.outputs.version }}
-      
-    - name: List build artifacts
-      run: |
-        echo "Contents of dist directory:"
-        dir dist
-        echo "Contents of release_artifacts directory:"
-        dir release_artifacts
-      
-    - name: Upload Windows executable
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-exe
-        path: release_artifacts/*.exe
-        retention-days: 7
-  
-  build-macos:
-    needs: check-conditions
-    if: needs.check-conditions.outputs.should_run == 'true'
-    runs-on: macos-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-        cache: 'pip'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install py2app
-        pip install pillow
-        pip install -r requirements.txt
-      
-    - name: Print system information
-      run: |
-        echo "macOS version: $(sw_vers -productVersion)"
-        echo "Architecture: $(uname -m)"
-        python -c "import platform; print(f'Python architecture: {platform.machine()}')"
-      
-    - name: Build macOS application
-      run: |
-        python build_mac.py clean py2app
-      env:
-        CI_VERSION: ${{ needs.check-conditions.outputs.version }}
-      
-    - name: Check app bundle
-      run: |
-        echo "Contents of dist directory:"
-        ls -la dist/
-        echo "Looking for .app directories:"
-        find dist -name "*.app" -type d
-        
-        echo "Contents of release_artifacts directory:"
-        ls -la release_artifacts/
-        
-        # Verify the app bundle structure in release_artifacts
-        APP_PATH=$(find release_artifacts -name "*.app" -type d | head -1)
-        if [ -n "$APP_PATH" ]; then
-          echo "Checking app bundle structure for $APP_PATH"
-          ls -la "$APP_PATH/Contents/MacOS/"
-          if [ ! -f "$APP_PATH/Contents/MacOS/"* ]; then
-            echo "ERROR: No executable found in MacOS directory!"
-            exit 1
-          else
-            echo "App bundle structure looks good!"
-          fi
-        else
-          echo "No .app bundle found in release_artifacts!"
-          exit 1
-        fi
-      
-    - name: Upload macOS app bundle
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-app
-        path: release_artifacts/*.app
-        retention-days: 7
-
   create-source-code-zip:
     name: Create Source Code Package
     needs: check-conditions
@@ -215,23 +106,61 @@ jobs:
         
         # Create the zip file
         cd source-code
-        zip -r ../SourceCode.zip .
+        zip -r ../KPAstrologyDashboard-${{ needs.check-conditions.outputs.version }}.zip .
         cd ..
         
         echo "Created source code zip:"
-        ls -la SourceCode.zip
+        ls -la KPAstrologyDashboard-${{ needs.check-conditions.outputs.version }}.zip
     
     - name: Upload source code zip
       uses: actions/upload-artifact@v4
       with:
         name: source-code
-        path: SourceCode.zip
+        path: KPAstrologyDashboard-${{ needs.check-conditions.outputs.version }}.zip
+        retention-days: 7
+        
+  prepare-installers:
+    name: Prepare Installation Scripts
+    needs: check-conditions
+    if: needs.check-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Update installation scripts with correct version
+      run: |
+        # Get the version
+        VERSION="${{ needs.check-conditions.outputs.version }}"
+        
+        # Update the Windows script with the version
+        sed -i "s/##VERSION##/$VERSION/g" install_windows.bat
+        
+        # Update the macOS script with the version
+        sed -i "s/##VERSION##/$VERSION/g" install_macos.sh
+        
+        # Make macOS script executable
+        chmod +x install_macos.sh
+    
+    - name: Upload Windows installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer
+        path: install_windows.bat
+        retention-days: 7
+        
+    - name: Upload macOS installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-installer
+        path: install_macos.sh
         retention-days: 7
 
   # This job creates a GitHub release with all artifacts when a tag is pushed
   create-release:
     name: Create Release
-    needs: [check-conditions, build-windows, build-macos, create-source-code-zip]
+    needs: [check-conditions, create-source-code-zip, prepare-installers]
     # Run this job if a tag is present or on manual trigger, but not for develop branch
     if: (needs.check-conditions.outputs.has_tag == 'true' || github.event_name == 'workflow_dispatch') && needs.check-conditions.outputs.is_develop != 'true'
     runs-on: ubuntu-latest
@@ -242,23 +171,6 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history and tags for generating release notes
       
-      - name: Extract version
-        id: get_version
-        run: |
-          if [[ "${{ needs.check-conditions.outputs.has_tag }}" == "true" ]]; then
-            VERSION="${{ needs.check-conditions.outputs.version }}"
-            TAG_VERSION="${{ needs.check-conditions.outputs.tag_name }}"
-            IS_DRAFT=false
-          else
-            VERSION="${{ needs.check-conditions.outputs.version }}"
-            TAG_VERSION="build-$VERSION"
-            IS_DRAFT=true
-          fi
-          
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_OUTPUT
-          echo "IS_DRAFT=$IS_DRAFT" >> $GITHUB_OUTPUT
-          
       - name: Download all workflow artifacts
         uses: actions/download-artifact@v4
         with:
@@ -269,31 +181,17 @@ jobs:
           mkdir -p release-artifacts
           
           # Rename artifacts with version number
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          
-          # Windows executable
-          echo "Preparing Windows executable..."
-          # Find and copy the Windows executable
-          find all-artifacts/windows-exe -name "*.exe" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}-Windows.exe \; || echo "No Windows executable found"
-          
-          # macOS app
-          echo "Preparing macOS app..."
-          # Find and copy the macOS app bundle
-          mkdir -p release-artifacts/tmp
-          find all-artifacts/macos-app -name "*.app" -type d -exec cp -r {} release-artifacts/tmp/ \; || echo "No macOS app bundle found"
-          # Rename the app bundle
-          FOUND_APP=$(find release-artifacts/tmp -name "*.app" -type d | head -1)
-          if [ -n "$FOUND_APP" ]; then
-            APP_NAME=$(basename "$FOUND_APP")
-            mkdir -p "release-artifacts/KPAstrologyDashboard-${VERSION}-macOS.app"
-            cp -r "$FOUND_APP/"* "release-artifacts/KPAstrologyDashboard-${VERSION}-macOS.app/"
-            # Clean up
-            rm -rf release-artifacts/tmp
-          fi
+          VERSION="${{ needs.check-conditions.outputs.version }}"
           
           # Source code ZIP
           echo "Preparing source code ZIP..."
-          find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/SourceCode-${VERSION}.zip \; || echo "No source code ZIP found"
+          find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}.zip \; || echo "No source code ZIP found"
+          
+          # Installer scripts
+          echo "Preparing installer scripts..."
+          find all-artifacts/windows-installer -name "*.bat" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.bat \; || echo "No Windows installer found"
+          find all-artifacts/macos-installer -name "*.sh" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-macOS-Installer.sh \; || echo "No macOS installer found"
+          chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
           
           # List what we've collected
           echo "Contents of release-artifacts directory:"
@@ -302,9 +200,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: KP Astrology Dashboard ${{ steps.get_version.outputs.VERSION }}
-          tag_name: ${{ steps.get_version.outputs.TAG_VERSION }}
-          draft: ${{ steps.get_version.outputs.IS_DRAFT }}
+          name: KP Astrology Dashboard ${{ needs.check-conditions.outputs.version }}
+          tag_name: ${{ needs.check-conditions.outputs.tag_name }}
+          draft: ${{ needs.check-conditions.outputs.has_tag != 'true' }}
           prerelease: false
           generate_release_notes: true  # Automatically generate notes based on commits
           files: |

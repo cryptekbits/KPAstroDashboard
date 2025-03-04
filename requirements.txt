@@ -10,5 +10,3 @@ ephem>=4.2
 python-dateutil>=2.9.0.post0
 numpy>=2.0.2
 packaging>=23.2
-py2exe>=0.13.0.0; platform_system=="Windows"
-py2app>=0.28.2; platform_system=="Darwin"

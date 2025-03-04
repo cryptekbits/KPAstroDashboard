@@ -13,6 +13,7 @@ import tempfile
 import subprocess
 import platform
 import shutil
+import glob
 from pathlib import Path
 import requests
 from packaging import version
@@ -79,9 +80,8 @@ class UpdateChecker(QObject):
             
             # Find the appropriate asset to download based on platform
             for asset in latest_release['assets']:
-                # For simplicity, we're assuming a zip file for all platforms
-                # In a real implementation, you might want to check for platform-specific assets
-                if asset['name'].endswith('.zip'):
+                # For our new approach, we look for the source code ZIP
+                if asset['name'].startswith('KPAstrologyDashboard-') and asset['name'].endswith('.zip'):
                     download_url = asset['browser_download_url']
                     break
             
@@ -173,7 +173,8 @@ class UpdateDownloader(QObject):
     def apply_update(self, download_path):
         """
         Apply the downloaded update.
-        This will extract the update and create a script to replace the application files.
+        This will extract the update and create a script to replace the application files
+        while preserving user preferences.
         """
         try:
             self.logger.info(f"Applying update from: {download_path}")
@@ -190,6 +191,44 @@ class UpdateDownloader(QObject):
             self.logger.error(f"Error applying update: {str(e)}")
             self.update_error.emit(f"Error applying update: {str(e)}")
     
+    def _merge_config_json(self, current_config_path, new_config_path, output_path):
+        """
+        Merge the current config.json with the new one, preserving user preferences
+        and adding any new fields.
+        
+        Args:
+            current_config_path: Path to the current config.json
+            new_config_path: Path to the new config.json from the update
+            output_path: Path to save the merged config.json
+        """
+        # Load current config
+        with open(current_config_path, 'r') as f:
+            current_config = json.load(f)
+        
+        # Load new config
+        with open(new_config_path, 'r') as f:
+            new_config = json.load(f)
+        
+        # Function to recursively merge dictionaries
+        def merge_dicts(current, new):
+            merged = current.copy()
+            for key, value in new.items():
+                if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                    # Recursively merge nested dictionaries
+                    merged[key] = merge_dicts(merged[key], value)
+                elif key not in merged:
+                    # Add new fields from the new config
+                    merged[key] = value
+                # Existing fields keep their values
+            return merged
+        
+        # Merge configs
+        merged_config = merge_dicts(current_config, new_config)
+        
+        # Save merged config
+        with open(output_path, 'w') as f:
+            json.dump(merged_config, f, indent=4)
+    
     def _create_windows_updater(self, download_path):
         """Create a batch script to update the application on Windows"""
         app_path = get_application_path()
@@ -200,15 +239,11 @@ class UpdateDownloader(QObject):
         # Get the executable name if running as frozen app
         if is_frozen():
             exe_name = os.path.basename(app_path)
+            python_cmd = "python"
         else:
             exe_name = "main.py"
         
-        # Create batch file to:
-        # 1. Wait for the application to exit
-        # 2. Extract the update
-        # 3. Copy the files to the application directory
-        # 4. Restart the application
-        
+        # Create batch file for the update process
         updater_path = os.path.join(temp_dir, "kp_dashboard_updater.bat")
         
         with open(updater_path, 'w') as file:
@@ -217,10 +252,68 @@ echo Waiting for application to close...
 timeout /t 2 /nobreak > nul
 
 echo Extracting update...
+if exist "{extract_dir}" rmdir /S /Q "{extract_dir}"
 powershell -command "Expand-Archive -Path '{download_path}' -DestinationPath '{extract_dir}' -Force"
 
-echo Updating application...
+echo Backing up user config...
+copy "{app_dir}\\config.json" "{temp_dir}\\config_backup.json"
+
+echo Merging configurations...
+powershell -Command "
+try {{
+    # Load current config
+    $currentConfig = Get-Content '{app_dir}\\config.json' | ConvertFrom-Json
+    
+    # Load new config
+    $newConfig = Get-Content '{extract_dir}\\config.json' | ConvertFrom-Json
+    
+    # Create a function to merge objects recursively
+    function Merge-Objects($current, $new) {{
+        $merged = $current.PSObject.Copy()
+        foreach ($property in $new.PSObject.Properties) {{
+            $propertyName = $property.Name
+            if (-not ($merged.PSObject.Properties.Name -contains $propertyName)) {{
+                # Add new fields from the new config
+                $merged | Add-Member -MemberType NoteProperty -Name $propertyName -Value $property.Value
+            }} elseif ($merged.$propertyName -is [PSCustomObject] -and $property.Value -is [PSCustomObject]) {{
+                # Recursively merge nested objects
+                $merged.$propertyName = Merge-Objects $merged.$propertyName $property.Value
+            }}
+            # Keep existing values for existing fields
+        }}
+        return $merged
+    }}
+    
+    # Merge the configs
+    $mergedConfig = Merge-Objects $currentConfig $newConfig
+    
+    # Save merged config to the backup location
+    $mergedConfig | ConvertTo-Json -Depth 100 | Set-Content '{temp_dir}\\config_merged.json'
+    Write-Host 'Config files merged successfully'
+}} catch {{
+    Write-Host 'Error merging config files: $_'
+    Write-Host 'Keeping original config file'
+    Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+}}"
+
+echo Checking for new requirements...
+if exist "{extract_dir}\\requirements.txt" (
+    powershell -Command "(Get-Content '{extract_dir}\\requirements.txt') -replace '; platform_system==\"Windows\"', '' -replace '; platform_system==\"Darwin\"', '' | Set-Content '{extract_dir}\\requirements_clean.txt'"
+    
+    echo Installing any new requirements...
+    cd /d "{extract_dir}"
+    python -m pip install -r requirements_clean.txt --upgrade
+)
+
+echo Updating application files...
+:: First, back up the entire app directory
+xcopy /E /I /Y "{app_dir}" "{temp_dir}\\kp_dashboard_backup"
+
+:: Now copy the new files
 xcopy /E /I /Y "{extract_dir}\\*" "{app_dir}"
+
+:: Restore the merged config
+copy "{temp_dir}\\config_merged.json" "{app_dir}\\config.json"
 
 echo Cleaning up...
 rmdir /S /Q "{extract_dir}"
@@ -230,6 +323,7 @@ echo Starting application...
 cd "{app_dir}"
 start "" "{os.path.join(app_dir, exe_name)}"
 
+echo Update completed successfully!
 del "%~f0"
 """)
         
@@ -258,12 +352,7 @@ del "%~f0"
             # For running as a script
             start_cmd = f"cd \"{app_dir}\" && python3 main.py"
         
-        # Create shell script to:
-        # 1. Wait for the application to exit
-        # 2. Extract the update
-        # 3. Copy the files to the application directory
-        # 4. Restart the application
-        
+        # Create shell script for the update process
         updater_path = os.path.join(temp_dir, "kp_dashboard_updater.sh")
         
         with open(updater_path, 'w') as file:
@@ -272,11 +361,78 @@ echo "Waiting for application to close..."
 sleep 2
 
 echo "Extracting update..."
+rm -rf "{extract_dir}"
 mkdir -p "{extract_dir}"
 unzip -o "{download_path}" -d "{extract_dir}"
 
-echo "Updating application..."
+echo "Backing up user config..."
+cp "{app_dir}/config.json" "{temp_dir}/config_backup.json"
+
+echo "Merging configurations..."
+# Function to merge JSON objects
+merge_configs() {{
+    python3 -c "
+import json
+import sys
+
+def merge_dicts(current, new):
+    merged = current.copy()
+    for key, value in new.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively merge nested dictionaries
+            merged[key] = merge_dicts(merged[key], value)
+        elif key not in merged:
+            # Add new fields from the new config
+            merged[key] = value
+    return merged
+
+try:
+    # Load current config
+    with open('{app_dir}/config.json', 'r') as f:
+        current_config = json.load(f)
+    
+    # Load new config
+    with open('{extract_dir}/config.json', 'r') as f:
+        new_config = json.load(f)
+    
+    # Merge configs
+    merged_config = merge_dicts(current_config, new_config)
+    
+    # Save merged config
+    with open('{temp_dir}/config_merged.json', 'w') as f:
+        json.dump(merged_config, f, indent=4)
+    
+    print('Config files merged successfully')
+except Exception as e:
+    print(f'Error merging config files: {{e}}')
+    print('Keeping original config file')
+    import shutil
+    shutil.copy('{app_dir}/config.json', '{temp_dir}/config_merged.json')
+"
+}}
+
+merge_configs
+
+echo "Checking for new requirements..."
+if [ -f "{extract_dir}/requirements.txt" ]; then
+    # Remove platform-specific markers
+    cat "{extract_dir}/requirements.txt" | sed 's/; platform_system=="Windows"//g' | sed 's/; platform_system=="Darwin"//g' > "{extract_dir}/requirements_clean.txt"
+    
+    echo "Installing any new requirements..."
+    cd "{extract_dir}"
+    python3 -m pip install -r requirements_clean.txt --upgrade
+fi
+
+echo "Updating application files..."
+# First, back up the entire app directory
+mkdir -p "{temp_dir}/kp_dashboard_backup"
+cp -R "{app_dir}/"* "{temp_dir}/kp_dashboard_backup/"
+
+# Now copy the new files
 cp -R "{extract_dir}/"* "{app_dir}/"
+
+# Restore the merged config
+cp "{temp_dir}/config_merged.json" "{app_dir}/config.json"
 
 echo "Cleaning up..."
 rm -rf "{extract_dir}"
@@ -285,6 +441,7 @@ rm "{download_path}"
 echo "Starting application..."
 {start_cmd} &
 
+echo "Update completed successfully!"
 rm "$0"
 """)
         
@@ -352,7 +509,7 @@ def show_update_dialog(parent_window, version, download_url):
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Available")
     msg_box.setText(f"A new version ({version}) of KP Dashboard is available.")
-    msg_box.setInformativeText("Would you like to download and install it now?")
+    msg_box.setInformativeText("Would you like to download and install it now? Your preferences will be preserved.")
     msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     msg_box.setDefaultButton(QMessageBox.Yes)
     
@@ -415,7 +572,7 @@ def handle_download_complete(parent_window, download_path, downloader, progress)
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Ready")
     msg_box.setText("The update has been downloaded and is ready to install.")
-    msg_box.setInformativeText("The application will close and restart with the new version. Continue?")
+    msg_box.setInformativeText("The application will close and restart with the new version. Your preferences will be preserved. Continue?")
     msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     msg_box.setDefaultButton(QMessageBox.Yes)
     
