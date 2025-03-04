@@ -602,7 +602,7 @@ def build_all_platforms(args):
 
 def main_build(args):
     """Main build implementation (extracted from main)"""
-    # If both onefile and onedir are specified, onefile takes precedence
+    # If both onefile and onedir are specified, onedir takes precedence
     if args.onedir:
         args.onefile = False
         
