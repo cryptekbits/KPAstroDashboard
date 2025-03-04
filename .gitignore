@@ -176,3 +176,4 @@ archive/
 config.json
 *.zip
 PACKAGING.md
+.DS_Store
