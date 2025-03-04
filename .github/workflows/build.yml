@@ -86,6 +86,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
+        # We now use the local flatlib library bundled with our code
         pip install -r requirements.txt
       
     - name: Build Windows executable
@@ -126,8 +127,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller
         pip install pillow
-        # Install the development version of flatlib directly from GitHub
-        pip install git+https://github.com/flatangle/flatlib.git@dev
+        # We now use the local flatlib library bundled with our code
         pip install -r requirements.txt
       
     - name: Print system information

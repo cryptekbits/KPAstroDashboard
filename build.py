@@ -691,12 +691,21 @@ def main_build(args):
     
     # Add flatlib data files
     try:
-        import flatlib
-        flatlib_path = os.path.dirname(flatlib.__file__)
-        cmd.extend([
-            "--add-data", f"{flatlib_path}{os.pathsep}flatlib",
-        ])
-        print(f"Added flatlib data files from {flatlib_path}")
+        # Use our local flatlib version from the lib directory
+        flatlib_path = os.path.join(os.getcwd(), 'lib', 'flatlib')
+        if os.path.exists(flatlib_path):
+            cmd.extend([
+                "--add-data", f"{flatlib_path}{os.pathsep}flatlib",
+            ])
+            print(f"Added local flatlib data files from {flatlib_path}")
+        else:
+            # Fall back to the installed version if local doesn't exist
+            import flatlib
+            flatlib_path = os.path.dirname(flatlib.__file__)
+            cmd.extend([
+                "--add-data", f"{flatlib_path}{os.pathsep}flatlib",
+            ])
+            print(f"Added installed flatlib data files from {flatlib_path}")
         
         # Create a runtime hook for flatlib
         hook_dir = os.path.join(os.getcwd(), "build", "hooks")
@@ -705,18 +714,13 @@ def main_build(args):
         with open(os.path.join(hook_dir, "hook-flatlib.py"), "w") as f:
             f.write("""
 # PyInstaller hook for flatlib
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-# Collect all submodules
 hiddenimports = collect_submodules('flatlib')
 
-# Collect all data files
 datas = collect_data_files('flatlib')
 """)
-        
-        cmd.extend([
-            "--additional-hooks-dir", hook_dir,
-        ])
+            
         print(f"Created runtime hook for flatlib in {hook_dir}")
     except ImportError:
         print("Warning: Could not import flatlib to add its data files")

@@ -5,14 +5,25 @@ This module provides the main class for generating and analyzing
 Vedic horoscope data according to the Krishnamurti Paddhati (KP) system.
 """
 
-from flatlib import const, aspects
-from flatlib.chart import Chart
-from flatlib.geopos import GeoPos
-from flatlib.datetime import Datetime
-from flatlib.object import GenericObject
-
-import collections
+import pandas as pd
 import polars as pl
+import collections
+from geopy.geocoders import Nominatim
+import re
+try:
+    # First try to import from our local copy
+    from lib.flatlib import const, aspects
+    from lib.flatlib.chart import Chart
+    from lib.flatlib.datetime import Datetime
+    from lib.flatlib.geopos import GeoPos
+    from lib.flatlib.object import GenericObject
+except ImportError:
+    # Fall back to the installed version if the local copy isn't available
+    from flatlib import const, aspects
+    from flatlib.chart import Chart
+    from flatlib.datetime import Datetime
+    from flatlib.geopos import GeoPos
+    from flatlib.object import GenericObject
 
 from .utils import dms_to_decdeg, clean_select_objects_split_str
 
