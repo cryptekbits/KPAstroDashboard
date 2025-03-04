@@ -64,36 +64,6 @@ def update_readme(version):
     print(f"Updated README.md with version {version}")
 
 
-def create_source_code_zip(version):
-    """Create a zip file of the source code for release"""
-    # Get the root directory of the project
-    root_dir = Path(__file__).parent.parent
-    
-    # Create the zip file
-    zip_file_name = f"SourceCode-v{version}.zip"
-    zip_file_path = root_dir / zip_file_name
-    
-    # Define directories and files to exclude
-    exclude_dirs = [".git", "venv", "__pycache__", "build", "dist", "temp_release", "logs"]
-    exclude_files = [".DS_Store"]
-    
-    with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(root_dir):
-            # Skip excluded directories
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
-            
-            for file in files:
-                if file in exclude_files:
-                    continue
-                    
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, root_dir)
-                zipf.write(file_path, arcname)
-    
-    print(f"Created source code zip file: {zip_file_name}")
-    return zip_file_path
-
-
 def git_commit_and_push(version):
     """Commit changes and push to GitHub"""
     root_dir = Path(__file__).parent.parent
@@ -415,37 +385,58 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         
         print(f"Found {len(artifact_files)} artifact files")
         
-        # Rename artifacts to match expected naming convention
+        # Expected artifact patterns
+        windows_exe_pattern = "*.exe"
+        windows_zip_pattern = "*Windows*.zip"
+        macos_zip_pattern = "*macOS*.zip"
+        source_zip_pattern = "SourceCode*.zip"
+        
+        # Find and rename artifacts to match expected naming convention
         renamed_artifacts = []
-        for artifact in artifact_files:
-            if artifact.is_file():
-                if artifact.suffix == ".exe":
-                    new_name = artifacts_dir / f"{APP_NAME}-{version}.exe"
-                    shutil.copy(artifact, new_name)
-                    renamed_artifacts.append(new_name)
-                    print(f"Prepared Windows artifact: {new_name.name}")
-                elif artifact.suffix == ".app" or ".app" in str(artifact):
-                    # Handle macOS app bundle
-                    if artifact.suffix != ".app":
-                        # This might be a file inside the .app bundle
-                        continue
-                    new_name = artifacts_dir / f"{APP_NAME}-{version}.app"
-                    if artifact != new_name:
-                        if new_name.exists():
-                            shutil.rmtree(new_name, ignore_errors=True)
-                        shutil.copytree(artifact, new_name)
-                        renamed_artifacts.append(new_name)
-                        print(f"Prepared macOS artifact: {new_name.name}")
-                elif "macos" in artifact.name.lower() and artifact.suffix in [".zip", ".dmg"]:
-                    new_name = artifacts_dir / f"{APP_NAME}-{version}-macos.{artifact.suffix[1:]}"
-                    shutil.copy(artifact, new_name)
-                    renamed_artifacts.append(new_name)
-                    print(f"Prepared macOS artifact: {new_name.name}")
-                elif artifact.suffix == ".zip" and "windows" in artifact.name.lower():
-                    new_name = artifacts_dir / f"{APP_NAME}-{version}-windows.zip"
-                    shutil.copy(artifact, new_name)
-                    renamed_artifacts.append(new_name)
-                    print(f"Prepared Windows zip artifact: {new_name.name}")
+        
+        # Windows executable
+        windows_exes = list(artifacts_dir.glob("**/" + windows_exe_pattern))
+        if windows_exes:
+            windows_exe = windows_exes[0]
+            new_name = artifacts_dir / f"{APP_NAME}-{version}.exe"
+            shutil.copy(windows_exe, new_name)
+            renamed_artifacts.append(new_name)
+            print(f"Prepared Windows executable: {new_name.name}")
+        else:
+            print("No Windows executable found")
+        
+        # Windows ZIP
+        windows_zips = list(artifacts_dir.glob("**/" + windows_zip_pattern))
+        if windows_zips:
+            windows_zip = windows_zips[0]
+            new_name = artifacts_dir / f"{APP_NAME}-{version}-Windows.zip"
+            shutil.copy(windows_zip, new_name)
+            renamed_artifacts.append(new_name)
+            print(f"Prepared Windows ZIP: {new_name.name}")
+        else:
+            print("No Windows ZIP found")
+        
+        # macOS ZIP
+        macos_zips = list(artifacts_dir.glob("**/" + macos_zip_pattern))
+        if macos_zips:
+            macos_zip = macos_zips[0]
+            new_name = artifacts_dir / f"{APP_NAME}-{version}-macOS.zip"
+            shutil.copy(macos_zip, new_name)
+            renamed_artifacts.append(new_name)
+            print(f"Prepared macOS ZIP: {new_name.name}")
+        else:
+            print("No macOS ZIP found")
+        
+        # Source code ZIP
+        source_zips = list(artifacts_dir.glob("**/" + source_zip_pattern))
+        if source_zips:
+            source_zip = source_zips[0]
+            new_name = artifacts_dir / f"SourceCode-{version}.zip"
+            shutil.copy(source_zip, new_name)
+            renamed_artifacts.append(new_name)
+            print(f"Prepared source code ZIP: {new_name.name}")
+        else:
+            print("No source code ZIP found")
         
         if not renamed_artifacts:
             print("Warning: No artifacts were found that match the expected patterns.")
@@ -464,8 +455,8 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         return []
 
 
-def create_github_release(version, source_code_zip):
-    """Create a GitHub release with the source code zip and release notes"""
+def create_github_release(version):
+    """Create a GitHub release with artifacts from GitHub Actions"""
     root_dir = Path(__file__).parent.parent
     tag_name = f"v{version}"
     
@@ -476,7 +467,7 @@ def create_github_release(version, source_code_zip):
         print("Please create the release manually with the following steps:")
         print(f"1. Go to the GitHub repository releases page")
         print(f"2. Create a new release with tag '{tag_name}'")
-        print(f"3. Add release notes and upload the source code zip file")
+        print(f"3. Add release notes and upload the artifacts")
         return False
     
     # Check if release already exists
@@ -492,26 +483,8 @@ def create_github_release(version, source_code_zip):
         if check_result.returncode == 0:
             print(f"Release {tag_name} already exists.")
             
-            # Check if we need to upload the source code zip
-            if "SourceCode-v" not in check_result.stdout:
-                print(f"Uploading source code zip to existing release {tag_name}...")
-                upload_result = subprocess.run(
-                    ["gh", "release", "upload", tag_name, source_code_zip, "--repo", repo_info],
-                    cwd=root_dir,
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"Successfully uploaded source code zip to release {tag_name}")
-                else:
-                    print(f"Failed to upload source code zip: {upload_result.stderr}")
-            else:
-                print("Source code zip already exists in the release.")
-            
             # Check if we need to upload build artifacts
-            if "AstroInsight" not in check_result.stdout:
+            if f"{APP_NAME}-{version}" not in check_result.stdout:
                 print("Downloading and uploading build artifacts...")
                 artifacts = download_workflow_artifacts(version, repo_info, root_dir)
                 
@@ -545,14 +518,20 @@ def create_github_release(version, source_code_zip):
     # Download build artifacts
     artifacts = download_workflow_artifacts(version, repo_info, root_dir)
     
+    if not artifacts:
+        print("No artifacts found. Please check GitHub Actions workflow status.")
+        proceed = input("Do you want to continue creating the release without artifacts? (y/n): ")
+        if proceed.lower() != 'y':
+            print("Aborting release creation.")
+            return False
+    
     try:
         # Create a GitHub release using GitHub CLI
         create_cmd = [
             "gh", "release", "create", tag_name,
             "--title", f"Release {tag_name}",
             "--notes", release_notes,
-            "--repo", repo_info,
-            source_code_zip
+            "--repo", repo_info
         ]
         
         # Add artifacts to the command
@@ -577,20 +556,6 @@ def create_github_release(version, source_code_zip):
             if "already exists" in create_result.stderr:
                 print(f"Release {tag_name} already exists. Trying to upload artifacts...")
                 
-                # Upload source code zip
-                upload_result = subprocess.run(
-                    ["gh", "release", "upload", tag_name, source_code_zip, "--repo", repo_info],
-                    cwd=root_dir,
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"Successfully uploaded source code zip to existing release {tag_name}")
-                else:
-                    print(f"Failed to upload source code zip: {upload_result.stderr}")
-                
                 # Upload build artifacts
                 for artifact in artifacts:
                     print(f"Uploading {artifact.name} to release...")
@@ -612,14 +577,14 @@ def create_github_release(version, source_code_zip):
             print("Please create the release manually with the following steps:")
             print(f"1. Go to the GitHub repository releases page")
             print(f"2. Create a new release with tag '{tag_name}'")
-            print(f"3. Add the release notes and upload the source code zip file and build artifacts")
+            print(f"3. Add the release notes and upload the artifacts")
             return False
     except Exception as e:
         print(f"Error during release creation: {e}")
         print("Please create the release manually with the following steps:")
         print(f"1. Go to the GitHub repository releases page")
         print(f"2. Create a new release with tag '{tag_name}'")
-        print(f"3. Add the release notes and upload the source code zip file and build artifacts")
+        print(f"3. Add the release notes and upload the artifacts")
         return False
 
 
@@ -711,9 +676,6 @@ def main():
         # Update README.md
         update_readme(args.version)
     
-    # Create source code zip
-    source_code_zip = create_source_code_zip(args.version)
-    
     if not args.no_push:
         # Commit and push changes
         print("\nStep 1: Committing and pushing changes to GitHub...")
@@ -732,7 +694,7 @@ def main():
         
         # Create GitHub release
         print("\nStep 3: Creating GitHub release with artifacts...")
-        release_success = create_github_release(args.version, source_code_zip)
+        release_success = create_github_release(args.version)
         
         if release_success:
             print(f"\n✅ Release v{args.version} process completed successfully!")
@@ -751,7 +713,8 @@ def main():
         print(f"2. Create a tag: git tag -a v{args.version} -m 'Release v{args.version}'")
         print("3. Push the changes: git push origin master")
         print(f"4. Push the tag: git push origin v{args.version}")
-        print("5. Create a GitHub release with the source code zip file")
+        print("5. Wait for GitHub Actions to build the artifacts")
+        print("6. Create a GitHub release with the artifacts")
 
 
 # Global variables

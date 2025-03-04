@@ -32,6 +32,11 @@ jobs:
       run: |
         python build.py --target-platform windows --target-arch x64 --onefile --portable --clean
       
+    - name: Create Windows ZIP
+      run: |
+        cd dist
+        powershell Compress-Archive -Path *.exe -DestinationPath AstroInsight-Windows.zip
+      
     - name: List build artifacts
       run: |
         echo "Contents of dist directory:"
@@ -40,13 +45,13 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kp-dashboard-windows
+        name: astroinsight-windows
         path: |
           dist/*.exe
-          dist/KPAstrologyDashboard-*.zip
+          dist/AstroInsight-Windows.zip
         retention-days: 7
   
-  build-macos-universal:
+  build-macos:
     runs-on: macos-latest
     
     steps:
@@ -71,9 +76,21 @@ jobs:
         echo "Architecture: $(uname -m)"
         python -c "import platform; print(f'Python architecture: {platform.machine()}')"
       
-    - name: Build macOS Universal executable
+    - name: Build macOS executable
       run: |
         python build.py --target-platform macos --target-arch auto --portable --clean
+      
+    - name: Create macOS ZIP
+      run: |
+        cd dist
+        # Find the .app file and zip it
+        APP_NAME=$(find . -name "*.app" -type d -maxdepth 1 | head -1)
+        if [ -n "$APP_NAME" ]; then
+          zip -r AstroInsight-macOS.zip "$APP_NAME"
+        else
+          echo "No .app file found in dist directory"
+          exit 1
+        fi
       
     - name: List build artifacts
       run: |
@@ -83,15 +100,49 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kp-dashboard-macos
+        name: astroinsight-macos
         path: |
-          dist/*
+          dist/*.app
+          dist/AstroInsight-macOS.zip
+        retention-days: 7
+
+  create-source-code-zip:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Create source code zip
+      run: |
+        # Create a directory for the source code
+        mkdir -p source-code
+        
+        # Copy all files except excluded ones
+        rsync -av --exclude='.git' --exclude='venv' --exclude='__pycache__' \
+              --exclude='build' --exclude='dist' --exclude='logs' \
+              --exclude='.DS_Store' --exclude='*.pyc' \
+              . source-code/
+        
+        # Create the zip file
+        cd source-code
+        zip -r ../SourceCode.zip .
+        cd ..
+        
+        echo "Created source code zip:"
+        ls -la SourceCode.zip
+    
+    - name: Upload source code zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: source-code
+        path: SourceCode.zip
         retention-days: 7
 
   # This job creates a GitHub release with all artifacts when a tag is pushed
   create-release:
     name: Create Release
-    needs: [build-windows, build-macos-universal]
+    needs: [build-windows, build-macos, create-source-code-zip]
     # Run this job on both tag pushes and workflow_dispatch (manual triggers)
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -102,10 +153,20 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history and tags for generating release notes
       
-      - name: Debug ref name
+      - name: Extract version
+        id: get_version
         run: |
-          echo "GitHub ref: ${{ github.ref }}"
-          echo "Event name: ${{ github.event_name }}"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+            echo "TAG_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "IS_DRAFT=false" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(date +'%Y.%m.%d')
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+            echo "TAG_VERSION=build-$VERSION" >> $GITHUB_OUTPUT
+            echo "IS_DRAFT=true" >> $GITHUB_OUTPUT
+          fi
           
       - name: Download all workflow artifacts
         uses: actions/download-artifact@v4
@@ -115,34 +176,31 @@ jobs:
       - name: Prepare artifacts for release
         run: |
           mkdir -p release-artifacts
-          # Copy all binary artifacts to the release directory
-          find all-artifacts -type f -not -path "*/\.*" | xargs -I{} cp -v {} release-artifacts/ || true
+          
+          # Rename artifacts with version number
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          
+          # Windows executable
+          find all-artifacts/astroinsight-windows -name "*.exe" -type f | head -1 | xargs -I{} cp {} release-artifacts/AstroInsight-${VERSION}.exe || true
+          
+          # Windows ZIP
+          find all-artifacts/astroinsight-windows -name "*.zip" -type f | head -1 | xargs -I{} cp {} release-artifacts/AstroInsight-${VERSION}-Windows.zip || true
+          
+          # macOS app ZIP
+          find all-artifacts/astroinsight-macos -name "*.zip" -type f | head -1 | xargs -I{} cp {} release-artifacts/AstroInsight-${VERSION}-macOS.zip || true
+          
+          # Source code ZIP
+          cp all-artifacts/source-code/SourceCode.zip release-artifacts/SourceCode-${VERSION}.zip || true
+          
           # List what we've collected
           echo "Contents of release-artifacts directory:"
           ls -la release-artifacts/
-      
-      # For workflow_dispatch, create a draft release with the current date    
-      - name: Get current date
-        if: github.event_name == 'workflow_dispatch'
-        id: date
-        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          
-      - name: Extract version from tag or use date
-        id: get_version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-            echo "IS_DRAFT=false" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=build-${{ steps.date.outputs.DATE }}" >> $GITHUB_OUTPUT
-            echo "IS_DRAFT=true" >> $GITHUB_OUTPUT
-          fi
           
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: KP Astrology Dashboard ${{ steps.get_version.outputs.VERSION }}
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.get_version.outputs.VERSION }}
+          name: AstroInsight ${{ steps.get_version.outputs.VERSION }}
+          tag_name: ${{ steps.get_version.outputs.TAG_VERSION }}
           draft: ${{ steps.get_version.outputs.IS_DRAFT }}
           prerelease: false
           generate_release_notes: true  # Automatically generate notes based on commits
