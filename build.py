@@ -165,45 +165,43 @@ def create_zip_archive(output_name, is_macos):
     """Create a ZIP archive of the portable application"""
     print(f"Creating ZIP archive of the portable application...")
     
-    # Determine the source directory to zip
+    # Determine the source path to zip
     if is_macos:
-        # On macOS, we have both the .app bundle and the directory
-        source_path = f"dist/{output_name}.app" if os.path.exists(f"dist/{output_name}.app") else f"dist/{output_name}"
+        # On macOS, use the .app bundle if it exists
+        source_path = f"dist/{output_name}.app"
+        if not os.path.exists(source_path):
+            source_path = f"dist/{output_name}"
+            if not os.path.exists(source_path):
+                print(f"Error: No source path found to create ZIP archive")
+                return
     else:
-        source_path = f"dist/{output_name}"
+        # For Windows/Linux, use the main executable if in onefile mode
+        if os.path.exists(f"dist/{output_name}.exe"):
+            source_path = f"dist/{output_name}.exe"
+        elif os.path.exists(f"dist/{output_name}"):
+            source_path = f"dist/{output_name}"
+        else:
+            print(f"Error: No source path found to create ZIP archive")
+            return
     
     # Create the ZIP file
-    zip_filename = f"{output_name}-portable.zip"
+    zip_path = f"dist/{output_name}-portable.zip"
     try:
-        if is_macos:
-            # For macOS, we need to zip the .app directory
-            app_path = f"dist/{output_name}.app"
-            zip_path = f"dist/{output_name}-portable.zip"
-            if os.path.exists(app_path):
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    for root, dirs, files in os.walk(app_path):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            zipf.write(file_path, os.path.relpath(file_path, "dist"))
-                print(f"ZIP archive created at {zip_path}")
-            else:
-                print(f"Error: {app_path} not found.")
+        if os.path.isdir(source_path):
+            # For directories (app bundles or onedir builds)
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(source_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        zipf.write(file_path, os.path.relpath(file_path, os.path.dirname(source_path)))
         else:
-            # For Windows and Linux, zip the directory
-            dir_path = f"dist/{output_name}"
-            zip_path = f"dist/{output_name}-portable.zip"
-            if os.path.exists(dir_path):
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    for root, dirs, files in os.walk(dir_path):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            zipf.write(file_path, os.path.relpath(file_path, "dist"))
-                print(f"ZIP archive created at {zip_path}")
-            else:
-                print(f"Error: {dir_path} not found.")
+            # For single files (onefile builds)
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(source_path, os.path.basename(source_path))
+        
+        print(f"ZIP archive created at {zip_path}")
     except Exception as e:
         print(f"Failed to create ZIP archive: {e}")
-        print(f"Failed to create ZIP archive.")
 
 def create_cross_compile_requirements(target_platform, target_arch):
     """
@@ -644,22 +642,8 @@ def main_build(args):
         output_name = f"KPAstrologyDashboard-v{VERSION}-linux-{target_arch}"
         icon_file = "resources/favicon.ico" if not args.no_icon else None
     
-    # Create a temporary directory to backup existing builds
+    # Disable backup/restore to prevent preserving old artifacts
     backup_dir = None
-    if os.path.exists("dist") and os.listdir("dist"):
-        print("Backing up existing builds...")
-        backup_dir = tempfile.mkdtemp()
-        # Backup existing builds
-        for item in os.listdir("dist"):
-            # Don't backup the same platform/arch we're building for to avoid confusion
-            if output_name not in item:
-                src = os.path.join("dist", item)
-                dst = os.path.join(backup_dir, item)
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
-        print(f"Existing builds backed up to {backup_dir}")
     
     # Clean build directories if requested
     if args.clean:
@@ -668,14 +652,8 @@ def main_build(args):
             if os.path.exists("build"):
                 shutil.rmtree("build", ignore_errors=True)
             if os.path.exists("dist"):
-                # Remove only files related to the current platform/arch
-                for item in os.listdir("dist"):
-                    if output_name in item:
-                        item_path = os.path.join("dist", item)
-                        if os.path.isdir(item_path):
-                            shutil.rmtree(item_path)
-                        else:
-                            os.remove(item_path)
+                # Remove the entire dist directory for a fresh build
+                shutil.rmtree("dist", ignore_errors=True)
             print("Build directories cleaned successfully.")
         except Exception as e:
             print(f"Warning: Could not clean directories completely: {e}")
@@ -784,7 +762,7 @@ def main_build(args):
     if args.portable:
         print(f"Portable app created successfully. Output in dist/{output_name}")
         
-        # Create ZIP archive if requested
+        # Create ZIP archive only if explicitly requested and not disabled
         if args.zip and not args.no_zip:
             create_zip_archive(output_name, is_macos)
         elif args.no_zip:
@@ -798,25 +776,8 @@ def main_build(args):
     
     print(f"Build completed successfully. Output in dist/{output_name}")
     
-    # After build is complete, restore backed up files
-    if backup_dir:
-        print("Restoring backed up builds...")
-        # Create dist directory if it doesn't exist
-        os.makedirs("dist", exist_ok=True)
-        # Restore backed up builds
-        for item in os.listdir(backup_dir):
-            src = os.path.join(backup_dir, item)
-            dst = os.path.join("dist", item)
-            if os.path.isdir(src):
-                if os.path.exists(dst):
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-            else:
-                shutil.copy2(src, dst)
-        # Clean up temporary directory
-        shutil.rmtree(backup_dir)
-        print("Backed up builds restored successfully.")
-    
+    # After build is complete, we no longer restore backed up files
+    # This was causing issues with preserving old artifacts
     return 0
 
 if __name__ == "__main__":

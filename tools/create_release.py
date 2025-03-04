@@ -108,40 +108,31 @@ def git_commit_and_push(version):
             subprocess.run(["git", "tag", "-a", tag_name, "-m", f"Release {tag_name}"], cwd=root_dir, check=True)
             print(f"Created tag {tag_name}")
         
-        # Push the changes if there were any
-        if has_changes:
-            push_result = subprocess.run(
-                ["git", "push", "origin", "master"],
-                cwd=root_dir,
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            
-            if push_result.returncode != 0:
-                print("Warning: Failed to push commits, but continuing with tag push.")
-                print(f"Error: {push_result.stderr}")
+        # Push both the commit and tag in a single operation
+        # This prevents triggering two separate GitHub Actions workflows
+        push_cmd = ["git", "push", "origin", "master"]
+        if tag_name not in tag_exists_result.stdout:
+            push_cmd.append(tag_name)
         
-        # Push the tag
-        tag_push_result = subprocess.run(
-            ["git", "push", "origin", tag_name],
+        push_result = subprocess.run(
+            push_cmd,
             cwd=root_dir,
             capture_output=True,
             text=True,
             check=False
         )
         
-        if tag_push_result.returncode != 0:
-            print(f"Warning: Failed to push tag {tag_name}.")
-            print(f"Error: {tag_push_result.stderr}")
+        if push_result.returncode != 0:
+            print(f"Warning: Failed to push changes.")
+            print(f"Error: {push_result.stderr}")
             
-            # Check if it's because the tag already exists remotely
-            if "already exists" in tag_push_result.stderr:
+            # If it failed because the tag already exists, we should continue
+            if not has_changes and "already exists" in push_result.stderr:
                 print(f"Tag {tag_name} already exists on remote. Continuing with release process.")
                 return True
             return False
         
-        print(f"Pushed tag {tag_name}")
+        print(f"Pushed changes and tag {tag_name} to origin")
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error during git operations: {e}")
