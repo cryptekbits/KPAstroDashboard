@@ -87,6 +87,21 @@ PLANETS_TABLE_COLS = [
     "Nakshatra", "RasiLord", "NakshatraLord", "SubLord", "SubSubLord", "HouseNr"
 ]
 
+# Add fallback values for AY_LAHIRI constants if they're not defined in flatlib.const
+if not hasattr(const, 'AY_LAHIRI'):
+    const.AY_LAHIRI = "Ayanamsa Lahiri"
+if not hasattr(const, 'AY_LAHIRI_1940'):
+    const.AY_LAHIRI_1940 = "Ayanamsa Lahiri 1940" 
+if not hasattr(const, 'AY_LAHIRI_VP285'):
+    const.AY_LAHIRI_VP285 = "Ayanamsa Lahiri VP285"
+if not hasattr(const, 'AY_LAHIRI_ICRC'):
+    const.AY_LAHIRI_ICRC = "Ayanamsa Lahiri ICRC"
+if not hasattr(const, 'AY_RAMAN'):
+    const.AY_RAMAN = "Ayanamsa Raman"
+if not hasattr(const, 'AY_KRISHNAMURTI'):
+    const.AY_KRISHNAMURTI = "Ayanamsa Krishnamurti"
+if not hasattr(const, 'AY_KRISHNAMURTI_SENTHILATHIBAN'):
+    const.AY_KRISHNAMURTI_SENTHILATHIBAN = "Ayanamsa Krishnamurti VP291"
 
 class VedicHoroscopeData:
     """
