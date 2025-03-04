@@ -1,10 +1,8 @@
 # <img src="resources/logo.png" width="500">
 
-![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)
-
-| Branch   | Version                                                                                | Status                                                                                                                                                                  |
-| :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `master` | ![version](https://img.shields.io/badge/version-1.0.3--alpha-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) |
+| Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
+| :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
+| `master` | ![version](https://img.shields.io/badge/version-1.0.3--alpha-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
 
 # KP Astrology Dashboard
 
