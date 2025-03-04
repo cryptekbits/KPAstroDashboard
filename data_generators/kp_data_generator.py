@@ -10,6 +10,7 @@ from calculations.aspect_calculator import AspectCalculator
 from calculations.hora_calculator import HoraCalculator
 from calculations.position_calculator import PlanetPositionCalculator
 from calculations.transit_calculator import TransitCalculator
+from calculations.planetary_strength_calculator import PlanetaryStrengthCalculator
 
 
 class KPDataGenerator:
@@ -64,6 +65,11 @@ class KPDataGenerator:
 
         # Initialize aspect calculator
         self.aspect_calculator = AspectCalculator()
+        
+        # Initialize planetary strength calculator
+        self.strength_calculator = PlanetaryStrengthCalculator(
+            self.position_calculator
+        )
 
     def create_chart_data(self, dt):
         """
@@ -112,7 +118,36 @@ class KPDataGenerator:
             DataFrame with planet positions
         """
         print(f"Getting planet positions for {dt}")
-        return self.position_calculator.get_planet_positions(dt)
+        planet_positions_df = self.position_calculator.get_planet_positions(dt)
+        
+        # Add planetary strength calculations
+        planet_positions_df = self.strength_calculator.add_planetary_strengths(planet_positions_df)
+        
+        # Add metadata for conditional formatting
+        bala_columns = [col for col in planet_positions_df.columns if any(bala in col for bala in ["Digbala", "Sthanabala", "Shadbala"])]
+        
+        # Get ranges for each bala
+        bala_ranges = self.strength_calculator.get_bala_ranges()
+        
+        # Add conditional formatting metadata
+        for col in bala_columns:
+            # Extract the bala type from the column name
+            bala_type = col.split(" ")[0]
+            
+            # Set min and max values for conditional formatting
+            min_val = bala_ranges[bala_type]["min"]
+            max_val = bala_ranges[bala_type]["max"]
+            
+            # Add metadata for conditional formatting
+            planet_positions_df.attrs[f"{col}_format"] = {
+                "type": "gradient",
+                "min": min_val,
+                "max": max_val,
+                "min_color": "red",
+                "max_color": "green"
+            }
+        
+        return planet_positions_df
 
     def get_sunrise_with_ephem(self, date, latitude, longitude):
         """

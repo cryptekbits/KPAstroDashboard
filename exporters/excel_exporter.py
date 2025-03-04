@@ -267,7 +267,10 @@ class ExcelExporter:
             'Nakshatra Lord': 14,
             'Sub Lord': 10,
             'Sub-Sub Lord': 12,
-            'Retrograde': 10
+            'Retrograde': 10,
+            'Digbala (0-60)': 14,
+            'Sthanabala (30-210)': 18,
+            'Shadbala (35-330)': 16
         }
         
         # Apply column widths for columns that exist in the dataframe
@@ -276,6 +279,33 @@ class ExcelExporter:
                 worksheet.set_column(col_num, col_num, column_widths[col_name])
             else:
                 worksheet.set_column(col_num, col_num, 12)  # Default width for other columns
+
+        # Add conditional formatting for bala columns
+        for col_num, col_name in enumerate(df.columns):
+            # Check if this is a bala column
+            if any(bala in col_name for bala in ["Digbala", "Sthanabala", "Shadbala"]):
+                # Extract formatting metadata if available
+                format_key = f"{col_name}_format"
+                if hasattr(df, 'attrs') and format_key in df.attrs:
+                    format_info = df.attrs[format_key]
+                    
+                    # Get min and max values for the gradient
+                    min_val = format_info.get("min", 0)
+                    max_val = format_info.get("max", 100)
+                    
+                    # Add conditional formatting with color scale
+                    worksheet.conditional_format(1, col_num, len(df), col_num, {
+                        'type': '3_color_scale',
+                        'min_color': '#FF9999',  # Light red
+                        'mid_color': '#FFFF99',  # Light yellow
+                        'max_color': '#99FF99',  # Light green
+                        'min_type': 'num',
+                        'mid_type': 'num',
+                        'max_type': 'num',
+                        'min_value': min_val,
+                        'mid_value': (min_val + max_val) / 2,
+                        'max_value': max_val
+                    })
 
         # Add filter and freeze panes
         worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)

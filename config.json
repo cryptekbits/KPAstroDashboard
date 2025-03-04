@@ -1,6 +1,6 @@
 {
     "planet_pos": {
-        "enabled": false,
+        "enabled": true,
         "columns": {
             "Rashi": true,
             "Nakshatra": true,
@@ -17,13 +17,13 @@
             "Sun": true,
             "Moon": true,
             "Mercury": true,
-            "Venus": false,
-            "Mars": false,
+            "Venus": true,
+            "Mars": true,
             "Jupiter": true,
-            "Saturn": false,
-            "Rahu": false,
+            "Saturn": true,
+            "Rahu": true,
             "Ketu": true,
-            "Uranus": false,
+            "Uranus": true,
             "Neptune": true,
             "Ascendant": false
         }
@@ -119,5 +119,49 @@
         "location": "/Users/cryptek/Desktop",
         "filename": "KP Panchang.xlsx",
         "auto_open": true
+    },
+    "user_defaults": {
+        "location": "Mumbai",
+        "date": "2025-03-03",
+        "time": "09:00",
+        "selected_sheets": [
+            "Planet Positions",
+            "Hora Timing",
+            "Moon",
+            "Sun",
+            "Mercury",
+            "Jupiter",
+            "Ketu",
+            "Neptune",
+            "Yogas"
+        ],
+        "yoga": {
+            "start_date": "2025-03-02",
+            "end_date": "2025-03-04",
+            "time_interval": "5 minutes (very precise)"
+        },
+        "aspects": {
+            "0": true,
+            "30": false,
+            "60": false,
+            "90": true,
+            "120": false,
+            "150": false,
+            "180": true
+        },
+        "aspect_planets": {
+            "Sun": true,
+            "Moon": true,
+            "Mercury": true,
+            "Venus": true,
+            "Mars": true,
+            "Jupiter": true,
+            "Saturn": true,
+            "Rahu": true,
+            "Ketu": true,
+            "Ascendant": true,
+            "Uranus": false,
+            "Neptune": false
+        }
     }
 }

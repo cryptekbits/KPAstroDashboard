@@ -156,7 +156,10 @@ class ConfigTab:
             "Position": QCheckBox("Position"),
             "Retrograde": QCheckBox("Retrograde"),
             "House": QCheckBox("House"),
-            "KP Pointer": QCheckBox("KP Pointer")
+            "KP Pointer": QCheckBox("KP Pointer"),
+            "Digbala (0-60)": QCheckBox("Digbala"),
+            "Sthanabala (30-210)": QCheckBox("Sthanabala"),
+            "Shadbala (35-330)": QCheckBox("Shadbala")
         }
         
         row, col = 0, 0
