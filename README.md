@@ -2,7 +2,8 @@
 
 | Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
 | :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
-| `master` | ![version](https://img.shields.io/badge/version-1.1.3-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
+| `master` | ![version](https://img.shields.io/badge/version-1.1.3-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
+| `develop` | ![version](https://img.shields.io/badge/version-dev-orange) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
 
 # KP Astrology Dashboard
 
@@ -38,12 +39,63 @@ The application is built with Python and uses the following key components:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/kp-astrology-dashboard.git
-cd kp-astrology-dashboard
+git clone https://github.com/cryptekbits/KPAstroDashboard.git
+cd KPAstroDashboard
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Run the application
+python main.py
 ```
+
+## Building from Source
+
+The application can be built into standalone executables for Windows and macOS:
+
+### Windows Build (using py2exe)
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Create a Windows executable
+python build_win.py --clean
+```
+
+The Windows executable will be created in the `dist` directory and copied to `release_artifacts`.
+
+### macOS Build (using py2app)
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Create a macOS application bundle
+python build_mac.py clean py2app
+```
+
+The macOS application bundle will be created in the `dist` directory and copied to `release_artifacts`.
+
+### Build Process and Releases
+
+Our build process follows these rules:
+
+1. **Development builds:** The `develop` branch is automatically built when changes are pushed to it, but no release is created.
+2. **Production builds:** The `master` branch is only built when a tag is pushed (e.g., `v1.2.0`).
+3. **Releases:** GitHub releases are automatically created when:
+   - A tag is pushed to the repository
+   - A manual build is triggered via GitHub Actions UI (except for develop branch)
+
+To create a release:
+```bash
+# Tag the commit
+git tag v1.2.0
+# Push the tag
+git push origin v1.2.0
+```
+
+This will trigger a build and automatically create a release with Windows and macOS executables.
 
 ## Usage
 
@@ -74,7 +126,7 @@ print(houses_data)
 - [x] Excel export functionality
 - [ ] Build into a deployable web app (Heroku/PythonAnywhere)
 - [ ] Add dynamically updating Excel and webapp
-- [ ] Calculate important aspects for user-defined timeframes
+- [x] Calculate important aspects for user-defined timeframes
 - [ ] Implement Kundli charting as per Lahiri ayanamsa
 - [ ] Draw inferences of astrological data for financial markets
 - [ ] Find correlations between planets, signs, houses, and Nakshatras with financial data
