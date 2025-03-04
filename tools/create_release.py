@@ -228,31 +228,21 @@ def wait_for_workflow_completion(version, timeout=1800):
     """Wait for the GitHub Actions workflow to complete"""
     # This requires the GitHub CLI to be installed and authenticated
     root_dir = Path(__file__).parent.parent
-    
-    # Get the repository information from version.py
-    version_file_path = root_dir / "version.py"
-    repo_owner = None
-    repo_name = None
-    
-    with open(version_file_path, "r") as f:
-        for line in f:
-            if line.startswith("GITHUB_REPO_OWNER"):
-                repo_owner = line.split("=")[1].strip().strip('"\'')
-            elif line.startswith("GITHUB_REPO_NAME"):
-                repo_name = line.split("=")[1].strip().strip('"\'')
-    
-    if not repo_owner or not repo_name:
-        print("Could not determine repository information from version.py")
-        return False
-    
     tag_name = f"v{version}"
-    print(f"Checking GitHub Actions workflow status for tag {tag_name}...")
+    
+    try:
+        repo_info = get_repo_info()
+        print(f"Checking GitHub Actions workflow status for tag {tag_name}...")
+    except Exception as e:
+        print(f"Error getting repository information: {e}")
+        print("Skipping workflow check and proceeding with release.")
+        return True
     
     # First check if there are any workflows running for this tag
     try:
         # Try to get workflow runs for the tag
         result = subprocess.run(
-            ["gh", "run", "list", "--repo", f"{repo_owner}/{repo_name}", "--json", "status,name,headBranch,databaseId,conclusion"],
+            ["gh", "run", "list", "--repo", repo_info, "--json", "status,name,headBranch,databaseId,conclusion"],
             cwd=root_dir,
             capture_output=True,
             text=True,
@@ -287,7 +277,7 @@ def wait_for_workflow_completion(version, timeout=1800):
         try:
             # Check workflow status using GitHub CLI
             result = subprocess.run(
-                ["gh", "run", "list", "--repo", f"{repo_owner}/{repo_name}", "--json", "status,conclusion,headBranch,databaseId"],
+                ["gh", "run", "list", "--repo", repo_info, "--json", "status,conclusion,headBranch,databaseId"],
                 cwd=root_dir,
                 capture_output=True,
                 text=True,
@@ -328,10 +318,20 @@ def create_github_release(version, source_code_zip):
     root_dir = Path(__file__).parent.parent
     tag_name = f"v{version}"
     
+    try:
+        repo_info = get_repo_info()
+    except Exception as e:
+        print(f"Error getting repository information: {e}")
+        print("Please create the release manually with the following steps:")
+        print(f"1. Go to the GitHub repository releases page")
+        print(f"2. Create a new release with tag '{tag_name}'")
+        print(f"3. Add release notes and upload the source code zip file")
+        return False
+    
     # Check if release already exists
     try:
         check_result = subprocess.run(
-            ["gh", "release", "view", tag_name, "--repo", f"{get_repo_info()}"],
+            ["gh", "release", "view", tag_name, "--repo", repo_info],
             cwd=root_dir,
             capture_output=True,
             text=True,
@@ -345,7 +345,7 @@ def create_github_release(version, source_code_zip):
             if "SourceCode-v" not in check_result.stdout:
                 print(f"Uploading source code zip to existing release {tag_name}...")
                 upload_result = subprocess.run(
-                    ["gh", "release", "upload", tag_name, source_code_zip, "--repo", f"{get_repo_info()}"],
+                    ["gh", "release", "upload", tag_name, source_code_zip, "--repo", repo_info],
                     cwd=root_dir,
                     capture_output=True,
                     text=True,
@@ -373,6 +373,7 @@ def create_github_release(version, source_code_zip):
                 "gh", "release", "create", tag_name,
                 "--title", f"Release {tag_name}",
                 "--notes", release_notes,
+                "--repo", repo_info,
                 source_code_zip
             ],
             cwd=root_dir,
@@ -391,7 +392,7 @@ def create_github_release(version, source_code_zip):
             if "already exists" in create_result.stderr:
                 print(f"Release {tag_name} already exists. Trying to upload source code zip...")
                 upload_result = subprocess.run(
-                    ["gh", "release", "upload", tag_name, source_code_zip, "--repo", f"{get_repo_info()}"],
+                    ["gh", "release", "upload", tag_name, source_code_zip, "--repo", repo_info],
                     cwd=root_dir,
                     capture_output=True,
                     text=True,
@@ -427,12 +428,39 @@ def get_repo_info():
     with open(version_file_path, "r") as f:
         for line in f:
             if line.startswith("GITHUB_REPO_OWNER"):
-                repo_owner = line.split("=")[1].strip().strip('"\'')
+                # Extract the value and remove any comments
+                value = line.split("=")[1].strip()
+                # Remove any comments that might be present
+                if "#" in value:
+                    value = value[:value.find("#")].strip()
+                # Remove quotes
+                repo_owner = value.strip('"\'')
             elif line.startswith("GITHUB_REPO_NAME"):
-                repo_name = line.split("=")[1].strip().strip('"\'')
+                # Extract the value and remove any comments
+                value = line.split("=")[1].strip()
+                # Remove any comments that might be present
+                if "#" in value:
+                    value = value[:value.find("#")].strip()
+                # Remove quotes
+                repo_name = value.strip('"\'')
     
     if not repo_owner or not repo_name:
         raise ValueError("Could not determine repository information from version.py")
+    
+    # Check if these are placeholder values
+    if "Replace with actual" in repo_owner or "Replace with actual" in repo_name:
+        print("Warning: Repository information in version.py contains placeholder values.")
+        print("Please update GITHUB_REPO_OWNER and GITHUB_REPO_NAME in version.py with actual values.")
+        
+        # Ask for the values interactively
+        print("\nPlease provide the actual repository information:")
+        input_owner = input("GitHub username/organization: ").strip()
+        input_name = input("Repository name: ").strip()
+        
+        if input_owner and input_name:
+            return f"{input_owner}/{input_name}"
+        else:
+            raise ValueError("Valid repository information is required to continue.")
     
     return f"{repo_owner}/{repo_name}"
 
