@@ -74,12 +74,14 @@ def collect_data_files():
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description="Build KP Astrology Dashboard for Windows")
-    parser.add_argument("--clean", action="store_true", help="Clean build directories before building")
-    args = parser.parse_args()
+    # Check for --clean flag directly in sys.argv to handle argument parsing issues
+    should_clean = False
+    if "--clean" in sys.argv:
+        should_clean = True
+        sys.argv.remove("--clean")
     
     # Clean build directories if requested
-    if args.clean:
+    if should_clean:
         print("Cleaning build directories...")
         for dir_to_clean in ['build', 'dist']:
             if os.path.exists(dir_to_clean):

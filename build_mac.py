@@ -28,7 +28,7 @@ APP = ['main.py']
 DATA_FILES = [
     'config.json',
     ('resources', ['resources/favicon.ico']),
-    ('astro_engine/data', os.listdir('astro_engine/data')),
+    ('astro_engine/data', [os.path.join('astro_engine/data', f) for f in os.listdir('astro_engine/data')]),
     ('data_generators', ['data_generators/locations.json']),
 ]
 
