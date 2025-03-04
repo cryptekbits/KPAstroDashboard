@@ -4,8 +4,8 @@ This file is updated with each release.
 """
 
 # Version information
-VERSION = "1.1.1"
-VERSION_NAME = "AI 1.1.1 - Alpha"
+VERSION = "1.1.2"
+VERSION_NAME = "AI 1.1.2 - Alpha"
 BUILD_DATE = "2025-03-04"
 
 # GitHub repository information
