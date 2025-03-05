@@ -7,7 +7,7 @@ from datetime import datetime
 
 # Default version information
 VERSION = "1.2.0"
-VERSION_NAME = "AI 1.2.0 - Installation & Build Enhancement Release"
+VERSION_NAME = "AI 1.2.0 - Cross-Platform Installation & Build System Enhancement Release"
 BUILD_DATE = "2025-03-05"
 
 # Check for environment variables that might override the version
