@@ -122,30 +122,36 @@
     },
     "user_defaults": {
         "location": "Mumbai",
-        "date": "2025-03-03",
+        "date": "2025-03-06",
         "time": "09:00",
         "selected_sheets": [
             "Planet Positions",
             "Hora Timing",
             "Moon",
+            "Ascendant",
             "Sun",
             "Mercury",
+            "Venus",
+            "Mars",
             "Jupiter",
+            "Saturn",
+            "Rahu",
             "Ketu",
+            "Uranus",
             "Neptune",
             "Yogas"
         ],
         "yoga": {
-            "start_date": "2025-03-02",
-            "end_date": "2025-03-04",
+            "start_date": "2025-03-05",
+            "end_date": "2025-03-07",
             "time_interval": "5 minutes (very precise)"
         },
         "aspects": {
             "0": true,
-            "30": false,
+            "30": true,
             "60": false,
             "90": true,
-            "120": false,
+            "120": true,
             "150": false,
             "180": true
         },

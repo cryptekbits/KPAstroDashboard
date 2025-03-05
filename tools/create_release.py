@@ -236,7 +236,7 @@ def wait_for_workflow_completion(version, timeout=1800):
                 
                 if artifacts_result.returncode == 0:
                     jobs_data = json.loads(artifacts_result.stdout)
-                    if "jobs" in jobs_data and any(job.get("name", "").startswith("build-") for job in jobs_data["jobs"]):
+                    if "jobs" in jobs_data and any(job.get("name", "").startswith("create-") for job in jobs_data["jobs"]):
                         print("Build jobs completed. Artifacts should be available.")
                         return True
                     else:
@@ -248,19 +248,23 @@ def wait_for_workflow_completion(version, timeout=1800):
                 
             in_progress_runs = [run for run in tag_runs if run.get("status") in ["in_progress", "queued", "waiting"]]
             if in_progress_runs:
-                run_id = in_progress_runs[0].get("databaseId")
-                print(f"Workflow for tag {tag_name} is already in progress (Run ID: {run_id}). Waiting for completion...")
+                print(f"Workflow for tag {tag_name} is in progress. Waiting for completion...")
+            else:
+                failed_runs = [run for run in tag_runs if run.get("status") == "completed" and run.get("conclusion") != "success"]
+                if failed_runs:
+                    print(f"Warning: Workflow for tag {tag_name} has failed!")
+                    print("Proceeding with release process, but artifacts may not be available.")
+                    return True
     except Exception as e:
-        print(f"Error checking initial workflow status: {e}")
-        print("Continuing with standard wait procedure...")
+        print(f"Error checking workflow status: {e}")
+        print("Skipping initial check and continuing with wait...")
     
+    # Wait for the workflow to complete
     start_time = time.time()
-    last_status_time = start_time
     while time.time() - start_time < timeout:
         try:
-            # Check workflow status using GitHub CLI
             result = subprocess.run(
-                ["gh", "run", "list", "--repo", repo_info, "--json", "status,conclusion,headBranch,databaseId,name"],
+                ["gh", "run", "list", "--repo", repo_info, "--json", "status,name,headBranch,databaseId,conclusion"],
                 cwd=root_dir,
                 capture_output=True,
                 text=True,
@@ -268,34 +272,28 @@ def wait_for_workflow_completion(version, timeout=1800):
             )
             
             runs = json.loads(result.stdout)
-            tag_runs = [run for run in runs if run.get("headBranch") == tag_name or (run.get("headBranch", "").startswith("refs/tags/") and version in run.get("headBranch", ""))]
             
-            current_time = time.time()
-            if current_time - last_status_time >= 60:  # Print status update every minute
-                print(f"Waiting for workflow completion... Elapsed time: {int((current_time - start_time) / 60)} minutes")
-                last_status_time = current_time
+            # Filter runs related to our tag
+            tag_runs = [run for run in runs if run.get("headBranch") == tag_name or (run.get("name") == "build" and "tags" in run.get("headBranch", ""))]
             
             if tag_runs:
-                for run in tag_runs:
-                    if run.get("status") == "completed":
-                        if run.get("conclusion") == "success":
-                            print(f"Workflow completed successfully! (Run ID: {run.get('databaseId')})")
-                            
-                            # Wait a bit more to ensure artifacts are fully processed
-                            print("Waiting 30 seconds for artifacts to be fully processed...")
-                            time.sleep(30)
-                            
-                            return True
-                        else:
-                            print(f"Workflow completed with status: {run.get('conclusion')} (Run ID: {run.get('databaseId')})")
-                            print("Continuing with release process anyway...")
-                            return True
-                
-                # If we get here, there are runs but none are completed
-                print(f"Workflow still running. Status: {tag_runs[0].get('status')}. Waiting...")
+                # Check if any of the runs are completed
+                completed_runs = [run for run in tag_runs if run.get("status") == "completed"]
+                if completed_runs:
+                    successful_runs = [run for run in completed_runs if run.get("conclusion") == "success"]
+                    if successful_runs:
+                        print(f"Workflow for tag {tag_name} completed successfully!")
+                        return True
+                    else:
+                        print(f"Warning: Workflow for tag {tag_name} has failed or been cancelled.")
+                        print("Proceeding with release process, but artifacts may not be available.")
+                        return True
+                else:
+                    print(f"Workflow for tag {tag_name} is still in progress. Waiting...")
             else:
                 print(f"No workflow runs found for tag {tag_name} yet. Waiting...")
             
+            # Wait for 30 seconds before checking again
             time.sleep(30)
         except Exception as e:
             print(f"Error checking workflow status: {e}")
@@ -379,45 +377,56 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         print(f"Found {len(artifact_files)} artifact files")
         
         # Expected artifact patterns
-        windows_exe_pattern = "**/*.exe"
-        macos_dmg_pattern = "**/AstroInsight-macOS.dmg"
-        source_zip_pattern = "**/SourceCode.zip"
+        source_zip_pattern = f"**/KPAstrologyDashboard-{version}.zip"
+        windows_installer_pattern = "**/KPAstrologyDashboard-Windows-Installer.bat"
+        macos_installer_pattern = "**/KPAstrologyDashboard-macOS-Installer.sh"
         
         # Find and rename artifacts to match expected naming convention
         renamed_artifacts = []
-        
-        # Windows executable
-        windows_exes = list(artifacts_dir.glob(windows_exe_pattern))
-        if windows_exes:
-            windows_exe = windows_exes[0]
-            new_name = artifacts_dir / f"{APP_NAME}-{version}.exe"
-            shutil.copy(windows_exe, new_name)
-            renamed_artifacts.append(new_name)
-            print(f"Prepared Windows executable: {new_name.name}")
-        else:
-            print("No Windows executable found")
-        
-        # macOS DMG (preferred format)
-        macos_dmgs = list(artifacts_dir.glob(macos_dmg_pattern))
-        if macos_dmgs:
-            macos_dmg = macos_dmgs[0]
-            new_name = artifacts_dir / f"{APP_NAME}-{version}.dmg"
-            shutil.copy(macos_dmg, new_name)
-            renamed_artifacts.append(new_name)
-            print(f"Prepared macOS DMG: {new_name.name}")
-        else:
-            print("No macOS DMG found")
         
         # Source code ZIP
         source_zips = list(artifacts_dir.glob(source_zip_pattern))
         if source_zips:
             source_zip = source_zips[0]
-            new_name = artifacts_dir / f"SourceCode-{version}.zip"
-            shutil.copy(source_zip, new_name)
-            renamed_artifacts.append(new_name)
-            print(f"Prepared source code ZIP: {new_name.name}")
+            renamed_artifacts.append(source_zip)
+            print(f"Found source code ZIP: {source_zip.name}")
         else:
             print("No source code ZIP found")
+        
+        # Windows installer
+        windows_installers = list(artifacts_dir.glob(windows_installer_pattern))
+        if windows_installers:
+            windows_installer = windows_installers[0]
+            renamed_artifacts.append(windows_installer)
+            print(f"Found Windows installer: {windows_installer.name}")
+        else:
+            print("No Windows installer found")
+        
+        # macOS installer
+        macos_installers = list(artifacts_dir.glob(macos_installer_pattern))
+        if macos_installers:
+            macos_installer = macos_installers[0]
+            renamed_artifacts.append(macos_installer)
+            print(f"Found macOS installer: {macos_installer.name}")
+            
+            # Create a macOS .command file (which is double-clickable)
+            macos_command_file = artifacts_dir / "KPAstrologyDashboard-macOS-Installer.command"
+            with open(macos_command_file, "w") as f:
+                # Get the content of the .sh file
+                with open(macos_installer, "r") as sh_file:
+                    sh_content = sh_file.read()
+                
+                # Write the same content to the .command file
+                f.write(sh_content)
+            
+            # Make the command file executable
+            os.chmod(macos_command_file, 0o755)
+            
+            # Add it to the renamed artifacts
+            renamed_artifacts.append(macos_command_file)
+            print(f"Created double-clickable macOS installer: {macos_command_file.name}")
+        else:
+            print("No macOS installer found")
         
         if not renamed_artifacts:
             print("Warning: No artifacts were found that match the expected patterns.")
@@ -467,7 +476,7 @@ def create_github_release(version):
             print(f"Release {tag_name} already exists.")
             
             # Check if we need to upload build artifacts
-            if f"{APP_NAME}-{version}" not in check_result.stdout:
+            if f"KPAstrologyDashboard-{version}.zip" not in check_result.stdout:
                 print("Downloading and uploading build artifacts...")
                 artifacts = download_workflow_artifacts(version, repo_info, root_dir)
                 
@@ -477,9 +486,10 @@ def create_github_release(version):
                         print(f"  - {artifact.name}")
                     
                     print("\nDistribution formats:")
-                    print(f"  - For Windows users: {APP_NAME}-{version}.exe")
-                    print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred)")
-                    print("Note: The .dmg file is the standard distribution format for macOS applications.")
+                    print(f"  - Source code: KPAstrologyDashboard-{version}.zip")
+                    print(f"  - Windows installer: KPAstrologyDashboard-Windows-Installer.bat")
+                    print(f"  - macOS installer: KPAstrologyDashboard-macOS-Installer.sh")
+                    print(f"  - macOS clickable installer: KPAstrologyDashboard-macOS-Installer.command")
                     
                     for artifact in artifacts:
                         print(f"Uploading {artifact.name} to release...")
@@ -493,6 +503,8 @@ def create_github_release(version):
                         
                         if upload_result.returncode == 0:
                             print(f"Successfully uploaded {artifact.name}")
+                        else:
+                            print(f"Error uploading {artifact.name}: {upload_result.stderr}")
                 else:
                     print("No build artifacts found to upload.")
             else:
@@ -518,15 +530,16 @@ def create_github_release(version):
             print(f"  - {artifact.name}")
         
         print("\nDistribution formats:")
-        print(f"  - For Windows users: {APP_NAME}-{version}.exe")
-        print(f"  - For macOS users: {APP_NAME}-{version}.dmg (preferred)")
-        print("Note: The .dmg file is the standard distribution format for macOS applications.")
+        print(f"  - Source code: KPAstrologyDashboard-{version}.zip")
+        print(f"  - Windows installer: KPAstrologyDashboard-Windows-Installer.bat")
+        print(f"  - macOS installer: KPAstrologyDashboard-macOS-Installer.sh")
+        print(f"  - macOS clickable installer: KPAstrologyDashboard-macOS-Installer.command")
     
     try:
         # Create a GitHub release using GitHub CLI
         create_cmd = [
             "gh", "release", "create", tag_name,
-            "--title", f"Release {tag_name}",
+            "--title", f"KP Astrology Dashboard {version}",
             "--notes", release_notes,
             "--repo", repo_info
         ]
@@ -548,59 +561,11 @@ def create_github_release(version):
             return True
         else:
             error_message = create_result.stderr.strip()
-            print(f"⚠️ GitHub release failed with status: {create_result.returncode}")
-            print(error_message)
             
-            # Check if it's a permissions issue (403)
-            if "Resource not accessible by integration" in error_message or "403" in error_message:
-                print("\nPermission error detected: Your GitHub token doesn't have sufficient permissions.")
-                print("\nTo fix this issue, try one of the following solutions:")
-                print("1. Use a Personal Access Token (PAT) with 'repo' scope:")
-                print("   a. Create a PAT at https://github.com/settings/tokens")
-                print("   b. Ensure it has the 'repo' scope")
-                print("   c. Set it as an environment variable: export GH_TOKEN=your_token")
-                print("   d. Run the release script again")
-                print("\n2. If using GitHub Actions:")
-                print("   a. Add permissions to your workflow file:")
-                print("      permissions:")
-                print("        contents: write  # Allows creating releases")
-                print("\n3. Create the release manually via GitHub web interface:")
-                print(f"   a. Go to: https://github.com/{repo_info}/releases/new?tag={tag_name}")
-                print("   b. Copy the release notes and upload the artifacts")
+            # Check if it failed due to the release already existing
+            if "already exists" in error_message:
+                print(f"Release {tag_name} already exists. Uploading artifacts...")
                 
-                # Ask if the user wants to continue with manual upload
-                try:
-                    manual_upload = input("\nWould you like to try creating the release manually? (y/n): ")
-                    if manual_upload.lower() == 'y':
-                        # Open the browser to the release creation page
-                        browser_cmd = None
-                        if sys.platform == 'darwin':  # macOS
-                            browser_cmd = ['open', f'https://github.com/{repo_info}/releases/new?tag={tag_name}']
-                        elif sys.platform == 'win32':  # Windows
-                            browser_cmd = ['start', f'https://github.com/{repo_info}/releases/new?tag={tag_name}']
-                        else:  # Linux
-                            browser_cmd = ['xdg-open', f'https://github.com/{repo_info}/releases/new?tag={tag_name}']
-                        
-                        try:
-                            subprocess.run(browser_cmd)
-                            print("\nOpened release creation page in your browser.")
-                            print("Please copy the release notes and upload the artifacts manually.")
-                            print(f"Local artifacts are available in: {artifacts_dir}")
-                        except Exception as e:
-                            print(f"Could not open browser: {e}")
-                            print(f"Please navigate to: https://github.com/{repo_info}/releases/new?tag={tag_name}")
-                    else:
-                        print("\nPlease fix the token permissions issue and try again.")
-                except KeyboardInterrupt:
-                    print("\nOperation cancelled. Please fix the token permissions issue and try again.")
-                
-                return False
-            
-            # Check if it's because the release already exists
-            elif "already exists" in error_message:
-                print(f"Release {tag_name} already exists. Trying to upload artifacts...")
-                
-                # Upload build artifacts
                 for artifact in artifacts:
                     print(f"Uploading {artifact.name} to release...")
                     upload_result = subprocess.run(
@@ -614,68 +579,66 @@ def create_github_release(version):
                     if upload_result.returncode == 0:
                         print(f"Successfully uploaded {artifact.name}")
                     else:
-                        print(f"Failed to upload {artifact.name}: {upload_result.stderr}")
+                        print(f"Error uploading {artifact.name}: {upload_result.stderr}")
                 
                 return True
-            
-            print("Please create the release manually with the following steps:")
-            print(f"1. Go to the GitHub repository releases page")
-            print(f"2. Create a new release with tag '{tag_name}'")
-            print(f"3. Add the release notes and upload the artifacts")
-            return False
+            else:
+                print(f"Error creating GitHub release: {error_message}")
+                return False
     except Exception as e:
-        print(f"Error during release creation: {e}")
-        print("Please create the release manually with the following steps:")
-        print(f"1. Go to the GitHub repository releases page")
-        print(f"2. Create a new release with tag '{tag_name}'")
-        print(f"3. Add the release notes and upload the artifacts")
+        print(f"Error creating GitHub release: {e}")
         return False
 
 
 def get_repo_info():
-    """Get repository information from version.py"""
-    version_file_path = Path(__file__).parent.parent / "version.py"
+    """Get the repository owner and name"""
+    root_dir = Path(__file__).parent.parent
+    
+    # Try to get from version.py first
+    version_file_path = root_dir / "version.py"
     repo_owner = None
     repo_name = None
     
-    with open(version_file_path, "r") as f:
-        for line in f:
-            if line.startswith("GITHUB_REPO_OWNER"):
-                # Extract the value and remove any comments
-                value = line.split("=")[1].strip()
-                # Remove any comments that might be present
-                if "#" in value:
-                    value = value[:value.find("#")].strip()
-                # Remove quotes
-                repo_owner = value.strip('"\'')
-            elif line.startswith("GITHUB_REPO_NAME"):
-                # Extract the value and remove any comments
-                value = line.split("=")[1].strip()
-                # Remove any comments that might be present
-                if "#" in value:
-                    value = value[:value.find("#")].strip()
-                # Remove quotes
-                repo_name = value.strip('"\'')
+    if version_file_path.exists():
+        with open(version_file_path, "r") as f:
+            for line in f:
+                if line.startswith("GITHUB_REPO_OWNER ="):
+                    repo_owner = line.split("=")[1].strip().strip('"\'')
+                elif line.startswith("GITHUB_REPO_NAME ="):
+                    repo_name = line.split("=")[1].strip().strip('"\'')
     
-    if not repo_owner or not repo_name:
-        raise ValueError("Could not determine repository information from version.py")
+    # If we have both values from version.py, return them
+    if repo_owner and repo_name:
+        return f"{repo_owner}/{repo_name}"
     
-    # Check if these are placeholder values
-    if "Replace with actual" in repo_owner or "Replace with actual" in repo_name:
-        print("Warning: Repository information in version.py contains placeholder values.")
-        print("Please update GITHUB_REPO_OWNER and GITHUB_REPO_NAME in version.py with actual values.")
+    # Otherwise, try to get from git remote
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=root_dir,
+            capture_output=True,
+            text=True,
+            check=True
+        )
         
-        # Ask for the values interactively
-        print("\nPlease provide the actual repository information:")
-        input_owner = input("GitHub username/organization: ").strip()
-        input_name = input("Repository name: ").strip()
+        git_url = result.stdout.strip()
         
-        if input_owner and input_name:
-            return f"{input_owner}/{input_name}"
-        else:
-            raise ValueError("Valid repository information is required to continue.")
+        # Parse GitHub URL to extract owner and repo
+        if "github.com" in git_url:
+            # Handle SSH URL format (git@github.com:owner/repo.git)
+            if git_url.startswith("git@github.com:"):
+                repo_info = git_url.split("git@github.com:")[1].split(".git")[0]
+            # Handle HTTPS URL format (https://github.com/owner/repo.git)
+            elif git_url.startswith(("https://github.com/", "http://github.com/")):
+                repo_info = git_url.split("github.com/")[1].split(".git")[0]
+            else:
+                raise ValueError(f"Unrecognized GitHub URL format: {git_url}")
+            
+            return repo_info
+    except Exception as e:
+        print(f"Error getting repository information from git: {e}")
     
-    return f"{repo_owner}/{repo_name}"
+    raise ValueError("Could not determine repository owner and name")
 
 
 def main():
@@ -685,16 +648,11 @@ def main():
     parser.add_argument("--no-push", action="store_true", help="Skip pushing to GitHub")
     parser.add_argument("--no-wait", action="store_true", help="Skip waiting for GitHub Actions")
     parser.add_argument("--force", action="store_true", help="Force update even if version hasn't changed")
-    parser.add_argument("--app-name", default="AstroInsight", help="Application name for release artifacts (default: AstroInsight)")
     parser.add_argument("--timeout", type=int, default=1800, help="Timeout in seconds for waiting for workflow completion (default: 1800)")
     
     args = parser.parse_args()
     
-    # Set global variables
-    global APP_NAME
-    APP_NAME = args.app_name
-    
-    print(f"Starting release process for {APP_NAME} v{args.version} ({args.version_name})")
+    print(f"Starting release process for KP Astrology Dashboard v{args.version} ({args.version_name})")
     
     # Check if the version is already set to the requested version
     current_version = None
@@ -759,10 +717,6 @@ def main():
         print(f"4. Push the tag: git push origin v{args.version}")
         print("5. Wait for GitHub Actions to build the artifacts")
         print("6. Create a GitHub release with the artifacts")
-
-
-# Global variables
-APP_NAME = "AstroInsight"  # Default application name, can be overridden by --app-name
 
 
 if __name__ == "__main__":

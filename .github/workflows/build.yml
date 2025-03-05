@@ -2,10 +2,10 @@ name: build
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ develop ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   workflow_dispatch:  # Allows manual triggering from the GitHub UI
 
 jobs:
@@ -18,6 +18,7 @@ jobs:
       has_tag: ${{ steps.check.outputs.has_tag }}
       tag_name: ${{ steps.check.outputs.tag_name }}
       version: ${{ steps.check.outputs.version }}
+      is_develop: ${{ steps.check.outputs.is_develop }}
     
     steps:
     - name: Checkout repository
@@ -28,6 +29,13 @@ jobs:
     - name: Check if we should run this workflow
       id: check
       run: |
+        # Check if this is a develop branch build
+        IS_DEVELOP=false
+        if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          IS_DEVELOP=true
+        fi
+        echo "is_develop=$IS_DEVELOP" >> $GITHUB_OUTPUT
+        
         # If this is a pull request or manual trigger, always run
         if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "should_run=true" >> $GITHUB_OUTPUT
@@ -48,174 +56,35 @@ jobs:
           exit 0
         fi
         
-        # If this is a branch push, check if this commit already has a tag
+        # If this is a develop branch push, we should run the workflow
+        if [[ "$IS_DEVELOP" == "true" ]]; then
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "has_tag=false" >> $GITHUB_OUTPUT
+          echo "tag_name=" >> $GITHUB_OUTPUT
+          echo "version=$(date +'%Y.%m.%d')-dev" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # If this is a branch push (master/main), check if this commit already has a tag
         COMMIT_SHA="${{ github.sha }}"
         TAG_AT_COMMIT=$(git tag --points-at $COMMIT_SHA)
         
         if [[ -n "$TAG_AT_COMMIT" && "$TAG_AT_COMMIT" == v* ]]; then
-          # This commit already has a version tag, and we'll likely get another workflow from the tag push
-          # So we'll skip this run to avoid duplication
-          echo "should_run=false" >> $GITHUB_OUTPUT
+          # This commit already has a version tag - should only build in response to the tag
+          echo "should_run=true" >> $GITHUB_OUTPUT
           echo "has_tag=true" >> $GITHUB_OUTPUT
           echo "tag_name=$TAG_AT_COMMIT" >> $GITHUB_OUTPUT
           echo "version=${TAG_AT_COMMIT#v}" >> $GITHUB_OUTPUT
         else
-          # No tag, so we should run the workflow
-          echo "should_run=true" >> $GITHUB_OUTPUT
+          # No tag, and it's not develop branch - we should NOT run the workflow
+          echo "should_run=false" >> $GITHUB_OUTPUT
           echo "has_tag=false" >> $GITHUB_OUTPUT
           echo "tag_name=" >> $GITHUB_OUTPUT
-          echo "version=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+          echo "version=0.0.0" >> $GITHUB_OUTPUT
         fi
-
-  build-windows:
-    needs: check-conditions
-    if: needs.check-conditions.outputs.should_run == 'true'
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-        cache: 'pip'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install -r requirements.txt
-      
-    - name: Build Windows executable
-      run: |
-        python build.py --target-platform windows --target-arch x64 --onefile --portable --clean --no-zip
-      env:
-        POLARS_SKIP_CPU_CHECK: 1
-      
-    - name: List build artifacts
-      run: |
-        echo "Contents of dist directory:"
-        dir dist
-      
-    - name: Upload Windows executable
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-exe
-        path: dist/*.exe
-        retention-days: 7
-  
-  build-macos:
-    needs: check-conditions
-    if: needs.check-conditions.outputs.should_run == 'true'
-    runs-on: macos-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-        cache: 'pip'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install pillow
-        pip install -r requirements.txt
-      
-    - name: Print system information
-      run: |
-        echo "macOS version: $(sw_vers -productVersion)"
-        echo "Architecture: $(uname -m)"
-        python -c "import platform; print(f'Python architecture: {platform.machine()}')"
-      
-    - name: Build macOS application
-      run: |
-        python build.py --target-platform macos --target-arch auto --portable --clean --no-zip --onedir
-      
-    - name: Check app bundle
-      run: |
-        echo "Contents of dist directory:"
-        ls -la dist/
-        echo "Looking for .app directories:"
-        find dist -name "*.app" -type d
-        
-        # Verify the app bundle structure
-        APP_PATH=$(find dist -name "*.app" -type d | head -1)
-        if [ -n "$APP_PATH" ]; then
-          echo "Checking app bundle structure for $APP_PATH"
-          ls -la "$APP_PATH/Contents/MacOS/"
-          if [ ! -f "$APP_PATH/Contents/MacOS/"* ]; then
-            echo "ERROR: No executable found in MacOS directory!"
-            exit 1
-          else
-            echo "App bundle structure looks good!"
-          fi
-        else
-          echo "No .app bundle found!"
-          exit 1
-        fi
-      
-    - name: Create DMG for macOS
-      run: |
-        # Install create-dmg tool
-        brew install create-dmg
-        
-        cd dist
-        APP_PATH=$(find . -name "*.app" -type d | head -1)
-        if [ -n "$APP_PATH" ]; then
-          echo "Creating DMG for $APP_PATH"
-          
-          # Find the icon file
-          ICON_PATH=$(find "$APP_PATH" -name "*.icns" | head -1)
-          
-          # Create a DMG file with or without the icon
-          if [ -n "$ICON_PATH" ]; then
-            echo "Using icon: $ICON_PATH"
-            create-dmg \
-              --volname "AstroInsight Installer" \
-              --volicon "$ICON_PATH" \
-              --window-pos 200 120 \
-              --window-size 800 500 \
-              --icon-size 100 \
-              --icon "$APP_PATH" 200 190 \
-              --hide-extension "$APP_PATH" \
-              --app-drop-link 600 185 \
-              "AstroInsight-macOS.dmg" \
-              "$APP_PATH" || echo "DMG creation failed, continuing anyway"
-          else
-            echo "No icon found, creating DMG without custom icon"
-            create-dmg \
-              --volname "AstroInsight Installer" \
-              --window-pos 200 120 \
-              --window-size 800 500 \
-              --icon-size 100 \
-              --icon "$APP_PATH" 200 190 \
-              --hide-extension "$APP_PATH" \
-              --app-drop-link 600 185 \
-              "AstroInsight-macOS.dmg" \
-              "$APP_PATH" || echo "DMG creation failed, continuing anyway"
-          fi
-          
-          ls -la AstroInsight-macOS.dmg || echo "DMG not created"
-        else
-          echo "No .app bundle found for DMG creation"
-          exit 1
-        fi
-      
-    - name: Upload macOS DMG
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-dmg
-        path: dist/*.dmg
-        retention-days: 7
 
   create-source-code-zip:
+    name: Create Source Code Package
     needs: check-conditions
     if: needs.check-conditions.outputs.should_run == 'true'
     runs-on: ubuntu-latest
@@ -237,25 +106,63 @@ jobs:
         
         # Create the zip file
         cd source-code
-        zip -r ../SourceCode.zip .
+        zip -r ../KPAstrologyDashboard-${{ needs.check-conditions.outputs.version }}.zip .
         cd ..
         
         echo "Created source code zip:"
-        ls -la SourceCode.zip
+        ls -la KPAstrologyDashboard-${{ needs.check-conditions.outputs.version }}.zip
     
     - name: Upload source code zip
       uses: actions/upload-artifact@v4
       with:
         name: source-code
-        path: SourceCode.zip
+        path: KPAstrologyDashboard-${{ needs.check-conditions.outputs.version }}.zip
+        retention-days: 7
+        
+  prepare-installers:
+    name: Prepare Installation Scripts
+    needs: check-conditions
+    if: needs.check-conditions.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Update installation scripts with correct version
+      run: |
+        # Get the version
+        VERSION="${{ needs.check-conditions.outputs.version }}"
+        
+        # Update the Windows script with the version
+        sed -i "s/##VERSION##/$VERSION/g" install_windows.bat
+        
+        # Update the macOS script with the version
+        sed -i "s/##VERSION##/$VERSION/g" install_macos.sh
+        
+        # Make macOS script executable
+        chmod +x install_macos.sh
+    
+    - name: Upload Windows installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer
+        path: install_windows.bat
+        retention-days: 7
+        
+    - name: Upload macOS installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-installer
+        path: install_macos.sh
         retention-days: 7
 
   # This job creates a GitHub release with all artifacts when a tag is pushed
   create-release:
     name: Create Release
-    needs: [check-conditions, build-windows, build-macos, create-source-code-zip]
-    # Run this job if a tag is present or on manual trigger
-    if: needs.check-conditions.outputs.has_tag == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [check-conditions, create-source-code-zip, prepare-installers]
+    # Run this job if a tag is present or on manual trigger, but not for develop branch
+    if: (needs.check-conditions.outputs.has_tag == 'true' || github.event_name == 'workflow_dispatch') && needs.check-conditions.outputs.is_develop != 'true'
     runs-on: ubuntu-latest
     
     steps:
@@ -264,23 +171,6 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history and tags for generating release notes
       
-      - name: Extract version
-        id: get_version
-        run: |
-          if [[ "${{ needs.check-conditions.outputs.has_tag }}" == "true" ]]; then
-            VERSION="${{ needs.check-conditions.outputs.version }}"
-            TAG_VERSION="${{ needs.check-conditions.outputs.tag_name }}"
-            IS_DRAFT=false
-          else
-            VERSION="${{ needs.check-conditions.outputs.version }}"
-            TAG_VERSION="build-$VERSION"
-            IS_DRAFT=true
-          fi
-          
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_OUTPUT
-          echo "IS_DRAFT=$IS_DRAFT" >> $GITHUB_OUTPUT
-          
       - name: Download all workflow artifacts
         uses: actions/download-artifact@v4
         with:
@@ -291,25 +181,27 @@ jobs:
           mkdir -p release-artifacts
           
           # Rename artifacts with version number
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          
-          # Windows executable
-          echo "Preparing Windows executable..."
-          # Unzip the Windows executable artifact first
-          find all-artifacts/windows-exe -name "*.zip" -type f -exec unzip -j {} -d windows-extracted \; || echo "No Windows executable zip found"
-          # Then copy the extracted exe to the release artifacts
-          find windows-extracted -name "*.exe" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.exe \; || {
-            # Fallback to direct search in case it wasn't zipped
-            find all-artifacts/windows-exe -name "*.exe" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.exe \;
-          } || echo "No Windows executable found"
-          
-          # macOS DMG (preferred distribution format for macOS apps)
-          echo "Preparing macOS DMG..."
-          find all-artifacts/macos-dmg -name "*.dmg" -type f -exec cp {} release-artifacts/AstroInsight-${VERSION}.dmg \; || echo "No macOS DMG found"
+          VERSION="${{ needs.check-conditions.outputs.version }}"
           
           # Source code ZIP
           echo "Preparing source code ZIP..."
-          find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/SourceCode-${VERSION}.zip \; || echo "No source code ZIP found"
+          find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}.zip \; || echo "No source code ZIP found"
+          
+          # Installer scripts
+          echo "Preparing installer scripts..."
+          find all-artifacts/windows-installer -name "*.bat" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.bat \; || echo "No Windows installer found"
+          find all-artifacts/macos-installer -name "*.sh" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-macOS-Installer.sh \; || echo "No macOS installer found"
+          chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
+          
+          # Create a macOS .command file (which is double-clickable)
+          echo "Creating double-clickable macOS installer..."
+          if [ -f "release-artifacts/KPAstrologyDashboard-macOS-Installer.sh" ]; then
+            cp release-artifacts/KPAstrologyDashboard-macOS-Installer.sh release-artifacts/KPAstrologyDashboard-macOS-Installer.command
+            chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.command
+            echo "Created double-clickable macOS installer: KPAstrologyDashboard-macOS-Installer.command"
+          else
+            echo "No macOS installer found, skipping .command file creation"
+          fi
           
           # List what we've collected
           echo "Contents of release-artifacts directory:"
@@ -318,9 +210,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: AstroInsight ${{ steps.get_version.outputs.VERSION }}
-          tag_name: ${{ steps.get_version.outputs.TAG_VERSION }}
-          draft: ${{ steps.get_version.outputs.IS_DRAFT }}
+          name: KP Astrology Dashboard ${{ needs.check-conditions.outputs.version }}
+          tag_name: ${{ needs.check-conditions.outputs.tag_name }}
+          draft: ${{ needs.check-conditions.outputs.has_tag != 'true' }}
           prerelease: false
           generate_release_notes: true  # Automatically generate notes based on commits
           files: |

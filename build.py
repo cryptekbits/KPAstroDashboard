@@ -539,10 +539,11 @@ def cleanup_cross_compile_files():
 
 def build_all_platforms(args):
     """
-    Build for all supported platforms
+    Build portable executables for Windows and macOS
     """
-    platforms = ["windows", "linux"]  # macOS builds need to be done on macOS
-    architectures = ["x64", "arm64"]  # arm64 for Linux only
+    # Only build for Windows and macOS (no Linux)
+    platforms = ["windows"]  # macOS builds need to be done on macOS
+    architectures = ["x64"]  # Only x64 architecture
     
     results = {}
     
@@ -561,6 +562,11 @@ def build_all_platforms(args):
     current_args.target_platform = current_platform
     current_args.target_arch = current_arch
     
+    # Force portable mode and zip creation
+    current_args.portable = True
+    current_args.zip = True
+    current_args.no_zip = False
+    
     # Run the main function for the current platform
     main_result = main_build(current_args)
     results[f"{current_platform}-{current_arch}"] = main_result == 0
@@ -568,28 +574,28 @@ def build_all_platforms(args):
     # Check if we're on Apple Silicon Mac
     is_apple_silicon = platform.system().lower() == "darwin" and platform.machine() == "arm64"
     
-    # Build for other platforms using Docker
-    for target_platform in platforms:
-        for target_arch in architectures:
-            # Skip the current platform (already built)
-            if target_platform == current_platform and target_arch == current_arch:
-                continue
+    # Build for Windows using Docker if we're on macOS
+    if current_platform == "macos":
+        for target_platform in platforms:
+            for target_arch in architectures:
+                # Skip the current platform (already built)
+                if target_platform == current_platform and target_arch == current_arch:
+                    continue
+                    
+                # For Apple Silicon Macs building Windows, suggest using the alternative image
+                if is_apple_silicon and target_platform == "windows" and not args.alt_win_image:
+                    print("\nNote: Building Windows on Apple Silicon Mac. Consider using --alt-win-image if this fails.")
+                    
+                print(f"\nBuilding for {target_platform}-{target_arch}...")
                 
-            # Skip macOS (needs to be built on macOS)
-            if target_platform == "macos":
-                continue
+                # Create a copy of args with portable and zip flags set
+                platform_args = argparse.Namespace(**vars(args))
+                platform_args.portable = True
+                platform_args.zip = True
+                platform_args.no_zip = False
                 
-            # Skip arm64 for Windows (not well supported)
-            if target_platform == "windows" and target_arch == "arm64":
-                continue
-            
-            # For Apple Silicon Macs building Windows, suggest using the alternative image
-            if is_apple_silicon and target_platform == "windows" and not args.alt_win_image:
-                print("\nNote: Building Windows on Apple Silicon Mac. Consider using --alt-win-image if this fails.")
-                
-            print(f"\nBuilding for {target_platform}-{target_arch}...")
-            result = cross_compile(target_platform, target_arch, args)
-            results[f"{target_platform}-{target_arch}"] = result == 0
+                result = cross_compile(target_platform, target_arch, platform_args)
+                results[f"{target_platform}-{target_arch}"] = result == 0
     
     # Print summary
     print("\nBuild Summary:")
@@ -689,14 +695,24 @@ def main_build(args):
         "--add-data", f"data_generators/locations.json{os.pathsep}data_generators",
     ])
     
-    # Add flatlib data files
+    # Add local flatlib directory if it exists
+    if os.path.exists("flatlib") and os.path.isdir("flatlib"):
+        cmd.extend([
+            "--add-data", f"flatlib{os.pathsep}flatlib",  # Add the local flatlib directory
+        ])
+        print("Added local flatlib directory to the build")
+    
+    # Add flatlib data files - if installed via pip, include those too for compatibility
     try:
         import flatlib
-        flatlib_path = os.path.dirname(flatlib.__file__)
-        cmd.extend([
-            "--add-data", f"{flatlib_path}{os.pathsep}flatlib",
-        ])
-        print(f"Added flatlib data files from {flatlib_path}")
+        flatlib_import_path = os.path.dirname(flatlib.__file__)
+        
+        # If there's no local flatlib directory, or if the imported flatlib is different from our local one, add the imported one
+        if not os.path.exists("flatlib") or not os.path.isdir("flatlib") or not os.path.samefile(flatlib_import_path, os.path.join(os.getcwd(), 'flatlib')):
+            cmd.extend([
+                "--add-data", f"{flatlib_import_path}{os.pathsep}flatlib",
+            ])
+            print(f"Added imported flatlib data files from {flatlib_import_path}")
         
         # Create a runtime hook for flatlib
         hook_dir = os.path.join(os.getcwd(), "build", "hooks")

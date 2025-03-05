@@ -4,7 +4,6 @@ requests>=2.31.0
 pytz>=2024.1
 polars-lts-cpu>=1.23.0
 PyQt5>=5.15.0
-flatlib>=0.2.3
 tabulate>=0.8.9
 psutil>=5.8.0
 ephem>=4.2

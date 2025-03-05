@@ -44,12 +44,8 @@ NAKSHATRAS = [
 
 AYANAMSA_MAPPING = {
     "Lahiri": const.AY_LAHIRI,
-    "Lahiri_1940": const.AY_LAHIRI_1940, 
-    "Lahiri_VP285": const.AY_LAHIRI_VP285,
-    "Lahiri_ICRC": const.AY_LAHIRI_ICRC,
     "Raman": const.AY_RAMAN,
-    "Krishnamurti": const.AY_KRISHNAMURTI,
-    "Krishnamurti_Senthilathiban": const.AY_KRISHNAMURTI_SENTHILATHIBAN,
+    "Krishnamurti": const.AY_KRISHNAMURTI
 }
 
 HOUSE_SYSTEM_MAPPING = {

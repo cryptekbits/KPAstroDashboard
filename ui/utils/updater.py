@@ -13,6 +13,7 @@ import tempfile
 import subprocess
 import platform
 import shutil
+import glob
 from pathlib import Path
 import requests
 from packaging import version
@@ -75,20 +76,11 @@ class UpdateChecker(QObject):
             
             latest_release = response.json()
             latest_version = latest_release['tag_name'].lstrip('v')
-            download_url = None
             
-            # Find the appropriate asset to download based on platform
-            for asset in latest_release['assets']:
-                # For simplicity, we're assuming a zip file for all platforms
-                # In a real implementation, you might want to check for platform-specific assets
-                if asset['name'].endswith('.zip'):
-                    download_url = asset['browser_download_url']
-                    break
+            # Create download URL using the tag format instead of asset download URL
+            # This ensures it will download from the GitHub tag archive directly
+            download_url = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/archive/refs/tags/v{latest_version}.zip"
             
-            if download_url is None:
-                self.error_occurred.emit("No suitable download found in the latest release")
-                return
-                
             # Compare versions
             if self._is_newer_version(latest_version, CURRENT_VERSION):
                 self.logger.info(f"New version available: {latest_version}")
@@ -128,52 +120,75 @@ class UpdateChecker(QObject):
 
 class UpdateDownloader(QObject):
     """Class to download and apply updates"""
-    download_progress = pyqtSignal(int)
-    download_complete = pyqtSignal(str)  # path to downloaded file
-    download_error = pyqtSignal(str)
-    update_complete = pyqtSignal()
-    update_error = pyqtSignal(str)
+    progress_updated = pyqtSignal(int)
+    download_complete = pyqtSignal(str)
+    error_occurred = pyqtSignal(str)
+    update_applied = pyqtSignal()
     
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(__name__)
+        self.temp_dir = tempfile.mkdtemp()
+        self.update_zip = None
     
     def download_update(self, download_url):
-        """Download the update file"""
+        """Download the update from the specified URL"""
         try:
             self.logger.info(f"Downloading update from: {download_url}")
             
             # Create a temporary file to download to
-            temp_dir = tempfile.gettempdir()
-            download_path = os.path.join(temp_dir, "kp_dashboard_update.zip")
+            self.update_zip = os.path.join(self.temp_dir, "update.zip")
             
-            # Download the file with progress reporting
+            # Download the file with progress tracking
             response = requests.get(download_url, stream=True, timeout=60)
             response.raise_for_status()
             
+            # Get total size
             total_size = int(response.headers.get('content-length', 0))
-            block_size = 1024  # 1 Kibibyte
-            downloaded = 0
             
-            with open(download_path, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    file.write(data)
-                    downloaded += len(data)
-                    if total_size > 0:
-                        progress = int((downloaded / total_size) * 100)
-                        self.download_progress.emit(progress)
+            # Download with progress tracking
+            downloaded_size = 0
+            with open(self.update_zip, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        # Update progress
+                        if total_size > 0:
+                            progress = int((downloaded_size / total_size) * 100)
+                            self.progress_updated.emit(progress)
             
-            self.logger.info(f"Download complete: {download_path}")
-            self.download_complete.emit(download_path)
+            self.logger.info("Download complete.")
+            
+            # Extract to separate temporary directory to handle the nested folder structure
+            extract_dir = os.path.join(self.temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            # Extract the ZIP file
+            import zipfile
+            with zipfile.ZipFile(self.update_zip, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # The extracted content will be in a nested directory with the format REPO_NAME-VERSION
+            # Find the nested directory
+            nested_dirs = [d for d in os.listdir(extract_dir) if os.path.isdir(os.path.join(extract_dir, d))]
+            if nested_dirs:
+                # Use the first directory found (should be the only one)
+                nested_dir = os.path.join(extract_dir, nested_dirs[0])
+                # Use this as the update source directory
+                self.download_complete.emit(nested_dir)
+            else:
+                self.error_occurred.emit("No valid update directory found in the downloaded package")
             
         except Exception as e:
             self.logger.error(f"Error downloading update: {str(e)}")
-            self.download_error.emit(f"Error downloading update: {str(e)}")
+            self.error_occurred.emit(f"Error downloading update: {str(e)}")
     
     def apply_update(self, download_path):
         """
         Apply the downloaded update.
-        This will extract the update and create a script to replace the application files.
+        This will extract the update and create a script to replace the application files
+        while preserving user preferences.
         """
         try:
             self.logger.info(f"Applying update from: {download_path}")
@@ -184,11 +199,49 @@ class UpdateDownloader(QObject):
             else:  # macOS or Linux
                 self._create_unix_updater(download_path)
                 
-            self.update_complete.emit()
+            self.update_applied.emit()
             
         except Exception as e:
             self.logger.error(f"Error applying update: {str(e)}")
-            self.update_error.emit(f"Error applying update: {str(e)}")
+            self.error_occurred.emit(f"Error applying update: {str(e)}")
+    
+    def _merge_config_json(self, current_config_path, new_config_path, output_path):
+        """
+        Merge the current config.json with the new one, preserving user preferences
+        and adding any new fields.
+        
+        Args:
+            current_config_path: Path to the current config.json
+            new_config_path: Path to the new config.json from the update
+            output_path: Path to save the merged config.json
+        """
+        # Load current config
+        with open(current_config_path, 'r') as f:
+            current_config = json.load(f)
+        
+        # Load new config
+        with open(new_config_path, 'r') as f:
+            new_config = json.load(f)
+        
+        # Function to recursively merge dictionaries
+        def merge_dicts(current, new):
+            merged = current.copy()
+            for key, value in new.items():
+                if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                    # Recursively merge nested dictionaries
+                    merged[key] = merge_dicts(merged[key], value)
+                elif key not in merged:
+                    # Add new fields from the new config
+                    merged[key] = value
+                # Existing fields keep their values
+            return merged
+        
+        # Merge configs
+        merged_config = merge_dicts(current_config, new_config)
+        
+        # Save merged config
+        with open(output_path, 'w') as f:
+            json.dump(merged_config, f, indent=4)
     
     def _create_windows_updater(self, download_path):
         """Create a batch script to update the application on Windows"""
@@ -200,15 +253,11 @@ class UpdateDownloader(QObject):
         # Get the executable name if running as frozen app
         if is_frozen():
             exe_name = os.path.basename(app_path)
+            python_cmd = "python"
         else:
             exe_name = "main.py"
         
-        # Create batch file to:
-        # 1. Wait for the application to exit
-        # 2. Extract the update
-        # 3. Copy the files to the application directory
-        # 4. Restart the application
-        
+        # Create batch file for the update process
         updater_path = os.path.join(temp_dir, "kp_dashboard_updater.bat")
         
         with open(updater_path, 'w') as file:
@@ -217,10 +266,68 @@ echo Waiting for application to close...
 timeout /t 2 /nobreak > nul
 
 echo Extracting update...
+if exist "{extract_dir}" rmdir /S /Q "{extract_dir}"
 powershell -command "Expand-Archive -Path '{download_path}' -DestinationPath '{extract_dir}' -Force"
 
-echo Updating application...
+echo Backing up user config...
+copy "{app_dir}\\config.json" "{temp_dir}\\config_backup.json"
+
+echo Merging configurations...
+powershell -Command "
+try {{
+    # Load current config
+    $currentConfig = Get-Content '{app_dir}\\config.json' | ConvertFrom-Json
+    
+    # Load new config
+    $newConfig = Get-Content '{extract_dir}\\config.json' | ConvertFrom-Json
+    
+    # Create a function to merge objects recursively
+    function Merge-Objects($current, $new) {{
+        $merged = $current.PSObject.Copy()
+        foreach ($property in $new.PSObject.Properties) {{
+            $propertyName = $property.Name
+            if (-not ($merged.PSObject.Properties.Name -contains $propertyName)) {{
+                # Add new fields from the new config
+                $merged | Add-Member -MemberType NoteProperty -Name $propertyName -Value $property.Value
+            }} elseif ($merged.$propertyName -is [PSCustomObject] -and $property.Value -is [PSCustomObject]) {{
+                # Recursively merge nested objects
+                $merged.$propertyName = Merge-Objects $merged.$propertyName $property.Value
+            }}
+            # Keep existing values for existing fields
+        }}
+        return $merged
+    }}
+    
+    # Merge the configs
+    $mergedConfig = Merge-Objects $currentConfig $newConfig
+    
+    # Save merged config to the backup location
+    $mergedConfig | ConvertTo-Json -Depth 100 | Set-Content '{temp_dir}\\config_merged.json'
+    Write-Host 'Config files merged successfully'
+}} catch {{
+    Write-Host 'Error merging config files: $_'
+    Write-Host 'Keeping original config file'
+    Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+}}"
+
+echo Checking for new requirements...
+if exist "{extract_dir}\\requirements.txt" (
+    powershell -Command "(Get-Content '{extract_dir}\\requirements.txt') -replace '; platform_system==\"Windows\"', '' -replace '; platform_system==\"Darwin\"', '' | Set-Content '{extract_dir}\\requirements_clean.txt'"
+    
+    echo Installing any new requirements...
+    cd /d "{extract_dir}"
+    python -m pip install -r requirements_clean.txt --upgrade
+)
+
+echo Updating application files...
+:: First, back up the entire app directory
+xcopy /E /I /Y "{app_dir}" "{temp_dir}\\kp_dashboard_backup"
+
+:: Now copy the new files
 xcopy /E /I /Y "{extract_dir}\\*" "{app_dir}"
+
+:: Restore the merged config
+copy "{temp_dir}\\config_merged.json" "{app_dir}\\config.json"
 
 echo Cleaning up...
 rmdir /S /Q "{extract_dir}"
@@ -230,6 +337,7 @@ echo Starting application...
 cd "{app_dir}"
 start "" "{os.path.join(app_dir, exe_name)}"
 
+echo Update completed successfully!
 del "%~f0"
 """)
         
@@ -258,12 +366,7 @@ del "%~f0"
             # For running as a script
             start_cmd = f"cd \"{app_dir}\" && python3 main.py"
         
-        # Create shell script to:
-        # 1. Wait for the application to exit
-        # 2. Extract the update
-        # 3. Copy the files to the application directory
-        # 4. Restart the application
-        
+        # Create shell script for the update process
         updater_path = os.path.join(temp_dir, "kp_dashboard_updater.sh")
         
         with open(updater_path, 'w') as file:
@@ -272,11 +375,78 @@ echo "Waiting for application to close..."
 sleep 2
 
 echo "Extracting update..."
+rm -rf "{extract_dir}"
 mkdir -p "{extract_dir}"
 unzip -o "{download_path}" -d "{extract_dir}"
 
-echo "Updating application..."
+echo "Backing up user config..."
+cp "{app_dir}/config.json" "{temp_dir}/config_backup.json"
+
+echo "Merging configurations..."
+# Function to merge JSON objects
+merge_configs() {{
+    python3 -c "
+import json
+import sys
+
+def merge_dicts(current, new):
+    merged = current.copy()
+    for key, value in new.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively merge nested dictionaries
+            merged[key] = merge_dicts(merged[key], value)
+        elif key not in merged:
+            # Add new fields from the new config
+            merged[key] = value
+    return merged
+
+try:
+    # Load current config
+    with open('{app_dir}/config.json', 'r') as f:
+        current_config = json.load(f)
+    
+    # Load new config
+    with open('{extract_dir}/config.json', 'r') as f:
+        new_config = json.load(f)
+    
+    # Merge configs
+    merged_config = merge_dicts(current_config, new_config)
+    
+    # Save merged config
+    with open('{temp_dir}/config_merged.json', 'w') as f:
+        json.dump(merged_config, f, indent=4)
+    
+    print('Config files merged successfully')
+except Exception as e:
+    print(f'Error merging config files: {{e}}')
+    print('Keeping original config file')
+    import shutil
+    shutil.copy('{app_dir}/config.json', '{temp_dir}/config_merged.json')
+"
+}}
+
+merge_configs
+
+echo "Checking for new requirements..."
+if [ -f "{extract_dir}/requirements.txt" ]; then
+    # Remove platform-specific markers
+    cat "{extract_dir}/requirements.txt" | sed 's/; platform_system=="Windows"//g' | sed 's/; platform_system=="Darwin"//g' > "{extract_dir}/requirements_clean.txt"
+    
+    echo "Installing any new requirements..."
+    cd "{extract_dir}"
+    python3 -m pip install -r requirements_clean.txt --upgrade
+fi
+
+echo "Updating application files..."
+# First, back up the entire app directory
+mkdir -p "{temp_dir}/kp_dashboard_backup"
+cp -R "{app_dir}/"* "{temp_dir}/kp_dashboard_backup/"
+
+# Now copy the new files
 cp -R "{extract_dir}/"* "{app_dir}/"
+
+# Restore the merged config
+cp "{temp_dir}/config_merged.json" "{app_dir}/config.json"
 
 echo "Cleaning up..."
 rm -rf "{extract_dir}"
@@ -285,6 +455,7 @@ rm "{download_path}"
 echo "Starting application..."
 {start_cmd} &
 
+echo "Update completed successfully!"
 rm "$0"
 """)
         
@@ -298,33 +469,27 @@ rm "$0"
         sys.exit(0)
 
 
-def check_for_updates_on_startup(parent_window):
-    """
-    Function to check for updates on application startup.
-    Shows a dialog if an update is available.
-    
-    Args:
-        parent_window: The main application window
-    """
-    update_thread = QThread()
+def check_for_updates_on_startup(window):
+    """Check for updates when the application starts"""
+    # Check for updates in a separate thread to avoid blocking the main UI
     update_checker = UpdateChecker()
+    update_thread = QThread()
+    
+    # Move the update checker to the thread
     update_checker.moveToThread(update_thread)
+    
+    # Keep references to prevent garbage collection
+    _update_threads.append((update_thread, update_checker))
     
     # Connect signals
     update_thread.started.connect(update_checker.check_for_updates)
-    
-    update_checker.update_available.connect(lambda version, url: show_update_dialog(parent_window, version, url))
-    update_checker.error_occurred.connect(lambda error: logging.error(f"Update check error: {error}"))
+    update_checker.update_available.connect(lambda version, url: show_update_dialog(window, version, url))
     
     # Clean up when done
     update_checker.update_available.connect(update_thread.quit)
     update_checker.update_not_available.connect(update_thread.quit)
     update_checker.error_occurred.connect(update_thread.quit)
     
-    # Make sure the thread and checker are not garbage collected
-    _update_threads.append((update_thread, update_checker))
-    
-    # Connect thread finished to cleanup
     update_thread.finished.connect(lambda: _cleanup_thread(update_thread, update_checker))
     
     # Start the thread
@@ -352,7 +517,7 @@ def show_update_dialog(parent_window, version, download_url):
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Available")
     msg_box.setText(f"A new version ({version}) of KP Dashboard is available.")
-    msg_box.setInformativeText("Would you like to download and install it now?")
+    msg_box.setInformativeText("Would you like to download and install it now? Your preferences will be preserved.")
     msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     msg_box.setDefaultButton(QMessageBox.Yes)
     
@@ -390,13 +555,13 @@ def download_and_install_update(parent_window, download_url):
     progress.canceled.connect(download_thread.quit)
     
     download_thread.started.connect(lambda: downloader.download_update(download_url))
-    downloader.download_progress.connect(progress.setValue)
+    downloader.progress_updated.connect(progress.setValue)
     
     downloader.download_complete.connect(lambda path: handle_download_complete(parent_window, path, downloader, progress))
-    downloader.download_error.connect(lambda error: handle_download_error(parent_window, error, progress))
+    downloader.error_occurred.connect(lambda error: handle_download_error(parent_window, error, progress))
     
-    downloader.update_complete.connect(progress.close)
-    downloader.update_error.connect(lambda error: handle_update_error(parent_window, error, progress))
+    downloader.update_applied.connect(progress.close)
+    downloader.error_occurred.connect(lambda error: handle_update_error(parent_window, error, progress))
     
     # Clean up when done
     download_thread.finished.connect(lambda: _cleanup_thread(download_thread, downloader))
@@ -415,7 +580,7 @@ def handle_download_complete(parent_window, download_path, downloader, progress)
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Ready")
     msg_box.setText("The update has been downloaded and is ready to install.")
-    msg_box.setInformativeText("The application will close and restart with the new version. Continue?")
+    msg_box.setInformativeText("The application will close and restart with the new version. Your preferences will be preserved. Continue?")
     msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     msg_box.setDefaultButton(QMessageBox.Yes)
     
@@ -431,19 +596,19 @@ def handle_download_error(parent_window, error, progress):
     
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Download Error")
-    msg_box.setText("An error occurred while downloading the update.")
+    msg_box.setText("Failed to download the update.")
     msg_box.setInformativeText(error)
     msg_box.setIcon(QMessageBox.Warning)
     msg_box.exec_()
 
 
 def handle_update_error(parent_window, error, progress):
-    """Handle update error"""
+    """Handle update installation error"""
     progress.close()
     
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Error")
-    msg_box.setText("An error occurred while installing the update.")
+    msg_box.setText("Failed to install the update.")
     msg_box.setInformativeText(error)
     msg_box.setIcon(QMessageBox.Warning)
     msg_box.exec_() 
