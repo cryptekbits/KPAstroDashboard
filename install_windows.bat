@@ -7,9 +7,9 @@ echo.
 
 :: Set version and GitHub repo information
 set VERSION=##VERSION##
-set REPO_OWNER=yourusername
-set REPO_NAME=kpDashboard
-set DOWNLOAD_URL=https://github.com/%REPO_OWNER%/%REPO_NAME%/releases/download/v%VERSION%/KPAstrologyDashboard-%VERSION%.zip
+set REPO_OWNER=cryptekbits
+set REPO_NAME=KPAstroDashboard
+set DOWNLOAD_URL=https://github.com/%REPO_OWNER%/%REPO_NAME%/archive/refs/tags/v%VERSION%.zip
 set INSTALL_DIR=%USERPROFILE%\KPAstrologyDashboard
 
 echo Creating installation directory...
@@ -32,7 +32,7 @@ if %ERRORLEVEL% NEQ 0 (
 :: Extract the zip file
 echo.
 echo Extracting files...
-powershell -Command "Expand-Archive -Path '%TEMP%\KPAstrologyDashboard.zip' -DestinationPath '%INSTALL_DIR%' -Force"
+powershell -Command "Expand-Archive -Path '%TEMP%\KPAstrologyDashboard.zip' -DestinationPath '%TEMP%\KPAstrologyDashboard-extract' -Force"
 
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to extract the application package.
@@ -40,8 +40,17 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Delete the temporary zip file
+:: Move files from the nested directory (GitHub creates a versioned folder)
+echo.
+echo Moving files to installation directory...
+:: Find the extracted folder (it will be KPAstroDashboard-VERSION)
+for /d %%G in ("%TEMP%\KPAstrologyDashboard-extract\*") do (
+    xcopy "%%G\*" "%INSTALL_DIR%" /E /I /Y
+)
+
+:: Delete the temporary files
 del "%TEMP%\KPAstrologyDashboard.zip"
+rmdir /S /Q "%TEMP%\KPAstrologyDashboard-extract"
 
 :: Change to the installation directory
 cd /d "%INSTALL_DIR%"

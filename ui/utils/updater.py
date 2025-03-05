@@ -76,19 +76,11 @@ class UpdateChecker(QObject):
             
             latest_release = response.json()
             latest_version = latest_release['tag_name'].lstrip('v')
-            download_url = None
             
-            # Find the appropriate asset to download based on platform
-            for asset in latest_release['assets']:
-                # For our new approach, we look for the source code ZIP
-                if asset['name'].startswith('KPAstrologyDashboard-') and asset['name'].endswith('.zip'):
-                    download_url = asset['browser_download_url']
-                    break
+            # Create download URL using the tag format instead of asset download URL
+            # This ensures it will download from the GitHub tag archive directly
+            download_url = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/archive/refs/tags/v{latest_version}.zip"
             
-            if download_url is None:
-                self.error_occurred.emit("No suitable download found in the latest release")
-                return
-                
             # Compare versions
             if self._is_newer_version(latest_version, CURRENT_VERSION):
                 self.logger.info(f"New version available: {latest_version}")
@@ -128,47 +120,69 @@ class UpdateChecker(QObject):
 
 class UpdateDownloader(QObject):
     """Class to download and apply updates"""
-    download_progress = pyqtSignal(int)
-    download_complete = pyqtSignal(str)  # path to downloaded file
-    download_error = pyqtSignal(str)
-    update_complete = pyqtSignal()
-    update_error = pyqtSignal(str)
+    progress_updated = pyqtSignal(int)
+    download_complete = pyqtSignal(str)
+    error_occurred = pyqtSignal(str)
+    update_applied = pyqtSignal()
     
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(__name__)
+        self.temp_dir = tempfile.mkdtemp()
+        self.update_zip = None
     
     def download_update(self, download_url):
-        """Download the update file"""
+        """Download the update from the specified URL"""
         try:
             self.logger.info(f"Downloading update from: {download_url}")
             
             # Create a temporary file to download to
-            temp_dir = tempfile.gettempdir()
-            download_path = os.path.join(temp_dir, "kp_dashboard_update.zip")
+            self.update_zip = os.path.join(self.temp_dir, "update.zip")
             
-            # Download the file with progress reporting
+            # Download the file with progress tracking
             response = requests.get(download_url, stream=True, timeout=60)
             response.raise_for_status()
             
+            # Get total size
             total_size = int(response.headers.get('content-length', 0))
-            block_size = 1024  # 1 Kibibyte
-            downloaded = 0
             
-            with open(download_path, 'wb') as file:
-                for data in response.iter_content(block_size):
-                    file.write(data)
-                    downloaded += len(data)
-                    if total_size > 0:
-                        progress = int((downloaded / total_size) * 100)
-                        self.download_progress.emit(progress)
+            # Download with progress tracking
+            downloaded_size = 0
+            with open(self.update_zip, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        # Update progress
+                        if total_size > 0:
+                            progress = int((downloaded_size / total_size) * 100)
+                            self.progress_updated.emit(progress)
             
-            self.logger.info(f"Download complete: {download_path}")
-            self.download_complete.emit(download_path)
+            self.logger.info("Download complete.")
+            
+            # Extract to separate temporary directory to handle the nested folder structure
+            extract_dir = os.path.join(self.temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            # Extract the ZIP file
+            import zipfile
+            with zipfile.ZipFile(self.update_zip, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # The extracted content will be in a nested directory with the format REPO_NAME-VERSION
+            # Find the nested directory
+            nested_dirs = [d for d in os.listdir(extract_dir) if os.path.isdir(os.path.join(extract_dir, d))]
+            if nested_dirs:
+                # Use the first directory found (should be the only one)
+                nested_dir = os.path.join(extract_dir, nested_dirs[0])
+                # Use this as the update source directory
+                self.download_complete.emit(nested_dir)
+            else:
+                self.error_occurred.emit("No valid update directory found in the downloaded package")
             
         except Exception as e:
             self.logger.error(f"Error downloading update: {str(e)}")
-            self.download_error.emit(f"Error downloading update: {str(e)}")
+            self.error_occurred.emit(f"Error downloading update: {str(e)}")
     
     def apply_update(self, download_path):
         """
@@ -185,11 +199,11 @@ class UpdateDownloader(QObject):
             else:  # macOS or Linux
                 self._create_unix_updater(download_path)
                 
-            self.update_complete.emit()
+            self.update_applied.emit()
             
         except Exception as e:
             self.logger.error(f"Error applying update: {str(e)}")
-            self.update_error.emit(f"Error applying update: {str(e)}")
+            self.error_occurred.emit(f"Error applying update: {str(e)}")
     
     def _merge_config_json(self, current_config_path, new_config_path, output_path):
         """
@@ -455,33 +469,27 @@ rm "$0"
         sys.exit(0)
 
 
-def check_for_updates_on_startup(parent_window):
-    """
-    Function to check for updates on application startup.
-    Shows a dialog if an update is available.
-    
-    Args:
-        parent_window: The main application window
-    """
-    update_thread = QThread()
+def check_for_updates_on_startup(window):
+    """Check for updates when the application starts"""
+    # Check for updates in a separate thread to avoid blocking the main UI
     update_checker = UpdateChecker()
+    update_thread = QThread()
+    
+    # Move the update checker to the thread
     update_checker.moveToThread(update_thread)
+    
+    # Keep references to prevent garbage collection
+    _update_threads.append((update_thread, update_checker))
     
     # Connect signals
     update_thread.started.connect(update_checker.check_for_updates)
-    
-    update_checker.update_available.connect(lambda version, url: show_update_dialog(parent_window, version, url))
-    update_checker.error_occurred.connect(lambda error: logging.error(f"Update check error: {error}"))
+    update_checker.update_available.connect(lambda version, url: show_update_dialog(window, version, url))
     
     # Clean up when done
     update_checker.update_available.connect(update_thread.quit)
     update_checker.update_not_available.connect(update_thread.quit)
     update_checker.error_occurred.connect(update_thread.quit)
     
-    # Make sure the thread and checker are not garbage collected
-    _update_threads.append((update_thread, update_checker))
-    
-    # Connect thread finished to cleanup
     update_thread.finished.connect(lambda: _cleanup_thread(update_thread, update_checker))
     
     # Start the thread
@@ -547,13 +555,13 @@ def download_and_install_update(parent_window, download_url):
     progress.canceled.connect(download_thread.quit)
     
     download_thread.started.connect(lambda: downloader.download_update(download_url))
-    downloader.download_progress.connect(progress.setValue)
+    downloader.progress_updated.connect(progress.setValue)
     
     downloader.download_complete.connect(lambda path: handle_download_complete(parent_window, path, downloader, progress))
-    downloader.download_error.connect(lambda error: handle_download_error(parent_window, error, progress))
+    downloader.error_occurred.connect(lambda error: handle_download_error(parent_window, error, progress))
     
-    downloader.update_complete.connect(progress.close)
-    downloader.update_error.connect(lambda error: handle_update_error(parent_window, error, progress))
+    downloader.update_applied.connect(progress.close)
+    downloader.error_occurred.connect(lambda error: handle_update_error(parent_window, error, progress))
     
     # Clean up when done
     download_thread.finished.connect(lambda: _cleanup_thread(download_thread, downloader))
@@ -588,19 +596,19 @@ def handle_download_error(parent_window, error, progress):
     
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Download Error")
-    msg_box.setText("An error occurred while downloading the update.")
+    msg_box.setText("Failed to download the update.")
     msg_box.setInformativeText(error)
     msg_box.setIcon(QMessageBox.Warning)
     msg_box.exec_()
 
 
 def handle_update_error(parent_window, error, progress):
-    """Handle update error"""
+    """Handle update installation error"""
     progress.close()
     
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Error")
-    msg_box.setText("An error occurred while installing the update.")
+    msg_box.setText("Failed to install the update.")
     msg_box.setInformativeText(error)
     msg_box.setIcon(QMessageBox.Warning)
     msg_box.exec_() 

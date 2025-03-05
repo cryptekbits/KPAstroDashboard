@@ -408,6 +408,23 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             macos_installer = macos_installers[0]
             renamed_artifacts.append(macos_installer)
             print(f"Found macOS installer: {macos_installer.name}")
+            
+            # Create a macOS .command file (which is double-clickable)
+            macos_command_file = artifacts_dir / "KPAstrologyDashboard-macOS-Installer.command"
+            with open(macos_command_file, "w") as f:
+                # Get the content of the .sh file
+                with open(macos_installer, "r") as sh_file:
+                    sh_content = sh_file.read()
+                
+                # Write the same content to the .command file
+                f.write(sh_content)
+            
+            # Make the command file executable
+            os.chmod(macos_command_file, 0o755)
+            
+            # Add it to the renamed artifacts
+            renamed_artifacts.append(macos_command_file)
+            print(f"Created double-clickable macOS installer: {macos_command_file.name}")
         else:
             print("No macOS installer found")
         
@@ -472,6 +489,7 @@ def create_github_release(version):
                     print(f"  - Source code: KPAstrologyDashboard-{version}.zip")
                     print(f"  - Windows installer: KPAstrologyDashboard-Windows-Installer.bat")
                     print(f"  - macOS installer: KPAstrologyDashboard-macOS-Installer.sh")
+                    print(f"  - macOS clickable installer: KPAstrologyDashboard-macOS-Installer.command")
                     
                     for artifact in artifacts:
                         print(f"Uploading {artifact.name} to release...")
@@ -515,6 +533,7 @@ def create_github_release(version):
         print(f"  - Source code: KPAstrologyDashboard-{version}.zip")
         print(f"  - Windows installer: KPAstrologyDashboard-Windows-Installer.bat")
         print(f"  - macOS installer: KPAstrologyDashboard-macOS-Installer.sh")
+        print(f"  - macOS clickable installer: KPAstrologyDashboard-macOS-Installer.command")
     
     try:
         # Create a GitHub release using GitHub CLI

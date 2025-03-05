@@ -193,6 +193,16 @@ jobs:
           find all-artifacts/macos-installer -name "*.sh" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-macOS-Installer.sh \; || echo "No macOS installer found"
           chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
           
+          # Create a macOS .command file (which is double-clickable)
+          echo "Creating double-clickable macOS installer..."
+          if [ -f "release-artifacts/KPAstrologyDashboard-macOS-Installer.sh" ]; then
+            cp release-artifacts/KPAstrologyDashboard-macOS-Installer.sh release-artifacts/KPAstrologyDashboard-macOS-Installer.command
+            chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.command
+            echo "Created double-clickable macOS installer: KPAstrologyDashboard-macOS-Installer.command"
+          else
+            echo "No macOS installer found, skipping .command file creation"
+          fi
+          
           # List what we've collected
           echo "Contents of release-artifacts directory:"
           ls -la release-artifacts/

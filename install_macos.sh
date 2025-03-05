@@ -6,9 +6,9 @@ echo
 
 # Set version and GitHub repo information
 VERSION="##VERSION##"
-REPO_OWNER="yourusername"
-REPO_NAME="kpDashboard"
-DOWNLOAD_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/v$VERSION/KPAstrologyDashboard-$VERSION.zip"
+REPO_OWNER="cryptekbits"
+REPO_NAME="KPAstroDashboard"
+DOWNLOAD_URL="https://github.com/$REPO_OWNER/$REPO_NAME/archive/refs/tags/v$VERSION.zip"
 INSTALL_DIR="$HOME/KPAstrologyDashboard"
 
 # Create installation directory
@@ -39,18 +39,33 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Extract the zip file
+# Extract the zip file to a temporary location
 echo
 echo "Extracting files..."
-unzip -o "/tmp/KPAstrologyDashboard.zip" -d "$INSTALL_DIR"
+TEMP_EXTRACT_DIR="/tmp/KPAstrologyDashboard-extract"
+mkdir -p "$TEMP_EXTRACT_DIR"
+unzip -o "/tmp/KPAstrologyDashboard.zip" -d "$TEMP_EXTRACT_DIR"
 
 if [ $? -ne 0 ]; then
     echo "Failed to extract the application package."
     exit 1
 fi
 
-# Delete the temporary zip file
+# Move files from the nested directory (GitHub creates a versioned folder)
+echo
+echo "Moving files to installation directory..."
+# Find the extracted folder (it will be KPAstroDashboard-VERSION)
+EXTRACTED_DIR=$(find "$TEMP_EXTRACT_DIR" -maxdepth 1 -type d | grep -v "^$TEMP_EXTRACT_DIR$" | head -n 1)
+if [ -n "$EXTRACTED_DIR" ]; then
+    cp -R "$EXTRACTED_DIR/"* "$INSTALL_DIR/"
+else
+    echo "Could not find extracted directory. Installation may be incomplete."
+    exit 1
+fi
+
+# Delete the temporary files
 rm "/tmp/KPAstrologyDashboard.zip"
+rm -rf "$TEMP_EXTRACT_DIR"
 
 # Change to the installation directory
 cd "$INSTALL_DIR"
