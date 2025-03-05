@@ -6,9 +6,9 @@ import os
 from datetime import datetime
 
 # Default version information
-VERSION = "1.1.3"
-VERSION_NAME = "AI 1.1.3 - Bug Fix Release"
-BUILD_DATE = "2025-03-04"
+VERSION = "1.2.0"
+VERSION_NAME = "AI 1.2.0 - Installation & Build Enhancement Release"
+BUILD_DATE = "2025-03-05"
 
 # Check for environment variables that might override the version
 # This is useful for CI/CD pipelines like GitHub Actions
