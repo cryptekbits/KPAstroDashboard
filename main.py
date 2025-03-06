@@ -12,6 +12,7 @@ import logging
 import shutil
 import urllib.request
 import zipfile
+import platform
 
 # Set environment variable to skip polars CPU check to avoid compatibility issues
 os.environ["POLARS_SKIP_CPU_CHECK"] = "1"
@@ -46,6 +47,12 @@ def ensure_ephemeris_files_exist():
     # First try to set the path to an existing directory with .se1 files
     for path in swefiles_paths:
         if os.path.exists(path) and any(f.endswith('.se1') for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))):
+            # On Windows, normalize the path to use forward slashes to avoid issues with SwissEph
+            if platform.system() == "Windows":
+                # Convert Windows path backslashes to forward slashes for SwissEph
+                path = path.replace('\\', '/')
+                logging.info(f"Normalized path for SwissEph on Windows: {path}")
+            
             setPath(path)
             logging.info(f"Using Swiss Ephemeris files from: {path}")
             return True
@@ -118,7 +125,12 @@ def ensure_ephemeris_files_exist():
             # Close the progress dialog
             progress.close()
             
-            # Set the ephemeris path
+            # Set the ephemeris path - normalize path on Windows
+            if platform.system() == "Windows":
+                # Convert Windows path backslashes to forward slashes for SwissEph
+                target_dir = target_dir.replace('\\', '/')
+                logging.info(f"Normalized download path for SwissEph on Windows: {target_dir}")
+            
             setPath(target_dir)
             logging.info(f"Downloaded Swiss Ephemeris files to: {target_dir}")
             

@@ -12,6 +12,7 @@
 """
 
 import swisseph
+import platform
 from flatlib import angle
 from flatlib import const
 
@@ -82,6 +83,9 @@ SEFLG_SIDEREAL = 64 * 1024
 
 def setPath(path):
     """ Sets the path for the swe files. """
+    # On Windows, ensure forward slashes for SwissEph compatibility
+    if platform.system() == "Windows" and '\\' in path:
+        path = path.replace('\\', '/')
     swisseph.set_ephe_path(path)
 
 

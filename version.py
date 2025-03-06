@@ -21,8 +21,8 @@ if os.environ.get("CI_VERSION"):
         BUILD_DATE = datetime.now().strftime("%Y-%m-%d")
 
 # GitHub repository information
-GITHUB_REPO_OWNER = "cryptekbits"  # Replace with actual GitHub username
-GITHUB_REPO_NAME = "KPAstroDashboard"  # Replace with actual repository name
+GITHUB_REPO_OWNER = "cryptekbits"
+GITHUB_REPO_NAME = "KPAstroDashboard"
 
 # Function to determine if this is a development version
 def is_dev_version():
