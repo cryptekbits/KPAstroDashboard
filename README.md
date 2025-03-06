@@ -2,8 +2,8 @@
 
 | Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
 | :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
-| `master` | ![version](https://img.shields.io/badge/version-1.1.3-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
-| `develop` | ![version](https://img.shields.io/badge/version-dev-orange) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg) |
+| `master` | ![version](https://img.shields.io/badge/version-1.1.3-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| `develop` | ![version](https://img.shields.io/badge/version-dev-orange) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
 
 # KP Astrology Dashboard
 
@@ -157,7 +157,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.13.2 or higher
 - PyQt5
 - Required Python packages (see requirements.txt)
 
@@ -216,3 +216,8 @@ Build Date: 2025-06-13
 ## License
 
 [License information here]
+
+## System Requirements
+
+- Windows 10/11 or macOS 12+
+- Python 3.13.2 or higher

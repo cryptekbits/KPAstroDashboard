@@ -10,6 +10,7 @@ REPO_OWNER="cryptekbits"
 REPO_NAME="KPAstroDashboard"
 DOWNLOAD_URL="https://github.com/$REPO_OWNER/$REPO_NAME/archive/refs/tags/v$VERSION.zip"
 INSTALL_DIR="$HOME/KPAstrologyDashboard"
+REQUIRED_PYTHON_VERSION="3.13.2"
 
 # Create installation directory
 echo "Creating installation directory..."
@@ -75,11 +76,39 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
-# Check if Python 3.9+ is installed
+# Function to compare version numbers
+version_compare() {
+    # $1 = version1, $2 = version2
+    # Returns 0 if version1 >= version2, 1 otherwise
+    if [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Check if Python is installed and meets the required version
 echo
-echo "Checking if Python is installed..."
-if ! command_exists python3; then
-    echo "Python 3 not found. Installing Python 3.9..."
+echo "Checking Python installation..."
+PYTHON_INSTALLED=false
+PYTHON_NEEDS_UPGRADE=false
+
+if command_exists python3; then
+    PYTHON_INSTALLED=true
+    CURRENT_PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    echo "Found Python $CURRENT_PYTHON_VERSION"
+    
+    if version_compare "$CURRENT_PYTHON_VERSION" "$REQUIRED_PYTHON_VERSION"; then
+        echo "Python version $CURRENT_PYTHON_VERSION meets the requirement (>= $REQUIRED_PYTHON_VERSION)"
+    else
+        echo "Python version $CURRENT_PYTHON_VERSION is older than required version $REQUIRED_PYTHON_VERSION"
+        PYTHON_NEEDS_UPGRADE=true
+    fi
+fi
+
+# Install or upgrade Python if needed
+if [ "$PYTHON_INSTALLED" = false ] || [ "$PYTHON_NEEDS_UPGRADE" = true ]; then
+    echo "Installing/Upgrading Python to version $REQUIRED_PYTHON_VERSION..."
     
     # Check if Homebrew is installed
     if ! command_exists brew; then
@@ -89,7 +118,7 @@ if ! command_exists python3; then
         if [ $? -ne 0 ]; then
             echo "Failed to install Homebrew."
             echo "Please install Homebrew manually from https://brew.sh"
-            echo "Then install Python 3.9 or later using 'brew install python@3.9'"
+            echo "Then install Python $REQUIRED_PYTHON_VERSION using 'brew install python@3.13'"
             exit 1
         fi
         
@@ -97,26 +126,29 @@ if ! command_exists python3; then
         eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)"
     fi
     
-    # Install Python 3.9
-    echo "Installing Python 3.9 using Homebrew..."
-    brew install python@3.9
+    # Install/upgrade Python
+    echo "Installing/Upgrading Python $REQUIRED_PYTHON_VERSION using Homebrew..."
+    brew update
+    brew install python@3.13
     
     if [ $? -ne 0 ]; then
-        echo "Failed to install Python 3.9."
-        echo "Please install Python 3.9 or later manually using 'brew install python@3.9'"
+        echo "Failed to install Python $REQUIRED_PYTHON_VERSION."
+        echo "Please install Python $REQUIRED_PYTHON_VERSION or later manually using 'brew install python@3.13'"
         exit 1
     fi
     
     # Ensure python3 command is available
     if ! command_exists python3; then
         echo "Python 3 installation failed."
-        echo "Please install Python 3.9 or later manually."
+        echo "Please install Python $REQUIRED_PYTHON_VERSION or later manually."
         exit 1
     fi
     
-    echo "Python 3.9 installed successfully."
+    # Verify the installed version
+    INSTALLED_PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    echo "Python $INSTALLED_PYTHON_VERSION installed successfully."
 else
-    echo "Python 3 is already installed."
+    echo "Python $CURRENT_PYTHON_VERSION is already installed and meets requirements."
 fi
 
 # Install required packages

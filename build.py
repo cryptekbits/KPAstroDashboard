@@ -289,7 +289,7 @@ def create_package_handler_script(target_platform, target_arch, problematic_pack
         elif package == "flatlib":
             script_content.extend([
                 "# Installing flatlib dependencies",
-                "pip install pyswisseph==2.00.00-2 --no-deps",
+                "pip install pyswisseph==2.10.3.2 --no-deps",
                 "pip install flatlib --no-deps"
             ])
         elif package in ["polars", "numpy", "pandas"] and target_arch == "arm64":

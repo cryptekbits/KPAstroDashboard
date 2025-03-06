@@ -4,7 +4,7 @@ This guide explains how to install and run the KP Astrology Dashboard applicatio
 
 ## Prerequisites
 
-The application requires Python 3.9 or later. The installation scripts will automatically install Python if it's not already present on your system.
+The application requires Python 3.13.2 or later. The installation scripts will automatically install or upgrade Python if needed.
 
 ## Installation Instructions
 
@@ -14,7 +14,7 @@ The application requires Python 3.9 or later. The installation scripts will auto
 2. Double-click the downloaded `.bat` file to run it
 3. The installer will:
    - Download the latest application package directly from GitHub
-   - Check if Python is installed (and install it if necessary)
+   - Check if Python is installed (and install or upgrade it if necessary)
    - Install all required packages
    - Create a desktop shortcut for easy access
 
@@ -27,7 +27,7 @@ The application requires Python 3.9 or later. The installation scripts will auto
    - If you get a security warning, right-click (or control+click) the file and select "Open"
 3. The installer will:
    - Download the latest application package directly from GitHub
-   - Check if Python is installed (and install it via Homebrew if necessary)
+   - Check if Python is installed (and install or upgrade it via Homebrew if necessary)
    - Install all required packages
    - Create a desktop shortcut for easy access
 
@@ -46,7 +46,7 @@ If you prefer to install manually or if the installation scripts don't work for 
 1. Download the source code directly from the [latest release tag](https://github.com/cryptekbits/KPAstroDashboard/archive/refs/tags/v1.1.3.zip) (replace v1.1.3 with the latest version)
    - You can also download `KPAstrologyDashboard-[version].zip` from the [releases page](https://github.com/cryptekbits/KPAstroDashboard/releases/latest) if available
 2. Extract the ZIP file to a location of your choice
-3. Ensure Python 3.9 or later is installed on your system
+3. Ensure Python 3.13.2 or later is installed on your system
 4. Open a terminal/command prompt and navigate to the extracted directory
 5. Install the required packages with: `pip install -r requirements.txt`
 6. Run the application with: `python main.py`

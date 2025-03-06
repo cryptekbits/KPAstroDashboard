@@ -18,9 +18,43 @@ echo.
 echo Step 1: Installing pyswisseph...
 python -m pip install --upgrade pip
 
-:: First try to install pyswisseph from pre-built wheels
-echo Attempting to install pyswisseph from pre-built wheels...
-python -m pip install --only-binary=:all: pyswisseph==2.10.3.post2
+:: Try to use local wheels first
+echo Checking for local pre-built pyswisseph wheel...
+set "PYTHON_VERSION="
+for /f "tokens=2" %%i in ('python -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"') do (
+    set "PYTHON_VERSION=%%i"
+)
+echo Detected Python version: %PYTHON_VERSION%
+
+:: Map Python version to wheel version
+set "CP_VER="
+if "%PYTHON_VERSION%"=="3.9" set "CP_VER=cp39-cp39"
+if "%PYTHON_VERSION%"=="3.10" set "CP_VER=cp310-cp310"
+if "%PYTHON_VERSION%"=="3.11" set "CP_VER=cp311-cp311"
+if "%PYTHON_VERSION%"=="3.12" set "CP_VER=cp312-cp312"
+if "%PYTHON_VERSION%"=="3.13" set "CP_VER=cp313-cp313"
+
+:: Try to find architecture-appropriate wheel
+set "ARCH=win_amd64"
+if defined CP_VER (
+    set "WHEEL_PATH=%INSTALL_DIR%\wheels\%ARCH%\pyswisseph-2.10.3.2-%CP_VER%-%ARCH%.whl"
+    if exist "%WHEEL_PATH%" (
+        echo Found local wheel: %WHEEL_PATH%
+        python -m pip install "%WHEEL_PATH%" --no-deps
+        if %ERRORLEVEL% EQU 0 (
+            echo Successfully installed pyswisseph from local wheel.
+            goto setup_ephemeris
+        ) else (
+            echo Failed to install from local wheel, trying alternative methods...
+        )
+    ) else (
+        echo No matching local wheel found for Python %PYTHON_VERSION% on %ARCH%
+    )
+)
+
+:: First try to install pyswisseph from pre-built wheels online
+echo Attempting to install pyswisseph from online pre-built wheels...
+python -m pip install --only-binary=:all: pyswisseph==2.10.3.2
 
 if %ERRORLEVEL% NEQ 0 (
     echo Pre-built wheel for pyswisseph not available for your system.
@@ -35,7 +69,7 @@ if %ERRORLEVEL% NEQ 0 (
     
     if "!CHOICE!"=="1" (
         echo Trying unofficial wheel repository...
-        python -m pip install pyswisseph==2.10.3.post2 --no-deps --index-url https://www.lfd.uci.edu/~gohlke/pythonlibs/
+        python -m pip install pyswisseph==2.10.3.2 --no-deps --index-url https://www.lfd.uci.edu/~gohlke/pythonlibs/
         
         if %ERRORLEVEL% NEQ 0 (
             echo Unofficial wheel repository failed.
@@ -53,7 +87,7 @@ if %ERRORLEVEL% NEQ 0 (
                     echo.
                     echo To install manually, you will need to:
                     echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
-                    echo 2. Run: pip install pyswisseph==2.10.3.post2
+                    echo 2. Run: pip install pyswisseph==2.10.3.2
                     echo.
                 ) else (
                     echo Successfully installed pyswisseph using conda-forge.
@@ -65,7 +99,7 @@ if %ERRORLEVEL% NEQ 0 (
                 echo.
                 echo To install manually, you will need to:
                 echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
-                echo 2. Run: pip install pyswisseph==2.10.3.post2
+                echo 2. Run: pip install pyswisseph==2.10.3.2
                 echo.
             )
         ) else (
@@ -73,7 +107,7 @@ if %ERRORLEVEL% NEQ 0 (
         )
     ) else if "!CHOICE!"=="2" (
         echo Trying to install with pip (this may fail if you don't have Visual Studio Build Tools)...
-        python -m pip install pyswisseph==2.10.3.post2
+        python -m pip install pyswisseph==2.10.3.2
         
         if %ERRORLEVEL% NEQ 0 (
             echo.
@@ -81,7 +115,7 @@ if %ERRORLEVEL% NEQ 0 (
             echo.
             echo To install manually, you will need to:
             echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
-            echo 2. Run: pip install pyswisseph==2.10.3.post2
+            echo 2. Run: pip install pyswisseph==2.10.3.2
             echo.
         ) else (
             echo Successfully installed pyswisseph.
@@ -90,9 +124,10 @@ if %ERRORLEVEL% NEQ 0 (
         echo Skipping pyswisseph installation.
     )
 ) else (
-    echo Successfully installed pyswisseph.
+    echo Successfully installed pyswisseph from online pre-built wheel.
 )
 
+:setup_ephemeris
 echo.
 echo Step 2: Setting up Swiss Ephemeris files...
 set SWEFILES_DIR=%INSTALL_DIR%\flatlib\resources\swefiles
