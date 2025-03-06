@@ -11,6 +11,7 @@ set REPO_OWNER=cryptekbits
 set REPO_NAME=KPAstroDashboard
 set DOWNLOAD_URL=https://github.com/%REPO_OWNER%/%REPO_NAME%/archive/refs/tags/v%VERSION%.zip
 set INSTALL_DIR=%USERPROFILE%\KPAstrologyDashboard
+set REQUIRED_PYTHON_VERSION=3.13.2
 
 echo Creating installation directory...
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
@@ -55,24 +56,52 @@ rmdir /S /Q "%TEMP%\KPAstrologyDashboard-extract"
 :: Change to the installation directory
 cd /d "%INSTALL_DIR%"
 
-:: Check if Python 3.9+ is installed
+:: Check if Python is installed and meets the required version
 echo.
-echo Checking if Python is installed...
+echo Checking Python installation...
+set PYTHON_INSTALLED=false
+set PYTHON_NEEDS_UPGRADE=false
+
 python --version > nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Python not found. Installing Python 3.9...
+if %ERRORLEVEL% EQU 0 (
+    set PYTHON_INSTALLED=true
+    for /f "tokens=2" %%V in ('python --version 2^>^&1') do set CURRENT_PYTHON_VERSION=%%V
+    echo Found Python %CURRENT_PYTHON_VERSION%
     
+    :: Compare versions using PowerShell
+    powershell -Command "$current = [version]'%CURRENT_PYTHON_VERSION%'; $required = [version]'%REQUIRED_PYTHON_VERSION%'; if ($current -ge $required) { exit 0 } else { exit 1 }"
+    
+    if %ERRORLEVEL% EQU 0 (
+        echo Python version %CURRENT_PYTHON_VERSION% meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
+    ) else (
+        echo Python version %CURRENT_PYTHON_VERSION% is older than required version %REQUIRED_PYTHON_VERSION%
+        set PYTHON_NEEDS_UPGRADE=true
+    )
+)
+
+:: Install or upgrade Python if needed
+if "%PYTHON_INSTALLED%"=="false" (
+    echo Python not found. Installing Python %REQUIRED_PYTHON_VERSION%...
+    set INSTALL_PYTHON=true
+) else if "%PYTHON_NEEDS_UPGRADE%"=="true" (
+    echo Upgrading Python to version %REQUIRED_PYTHON_VERSION%...
+    set INSTALL_PYTHON=true
+) else (
+    set INSTALL_PYTHON=false
+)
+
+if "%INSTALL_PYTHON%"=="true" (
     :: Create a temporary directory for the installer
     mkdir %TEMP%\kp_dashboard_setup > nul 2>&1
     cd %TEMP%\kp_dashboard_setup
     
     :: Download Python installer
     echo Downloading Python installer...
-    powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe' -OutFile 'python-installer.exe'"
+    powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/%REQUIRED_PYTHON_VERSION%/python-%REQUIRED_PYTHON_VERSION%-amd64.exe' -OutFile 'python-installer.exe'"
     
     if %ERRORLEVEL% NEQ 0 (
         echo Failed to download Python installer.
-        echo Please install Python 3.9 or later manually from https://www.python.org/downloads/
+        echo Please install Python %REQUIRED_PYTHON_VERSION% or later manually from https://www.python.org/downloads/
         pause
         exit /b 1
     )
@@ -90,14 +119,15 @@ if %ERRORLEVEL% NEQ 0 (
     python --version > nul 2>&1
     if %ERRORLEVEL% NEQ 0 (
         echo Failed to install Python automatically.
-        echo Please install Python 3.9 or later manually from https://www.python.org/downloads/
+        echo Please install Python %REQUIRED_PYTHON_VERSION% or later manually from https://www.python.org/downloads/
         pause
         exit /b 1
     )
     
-    echo Python installed successfully.
+    for /f "tokens=2" %%V in ('python --version 2^>^&1') do set INSTALLED_PYTHON_VERSION=%%V
+    echo Python %INSTALLED_PYTHON_VERSION% installed successfully.
 ) else (
-    echo Python is already installed.
+    echo Python %CURRENT_PYTHON_VERSION% is already installed and meets requirements.
 )
 
 :: Install required packages
@@ -112,31 +142,21 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Create desktop shortcut with icon
+:: Create desktop shortcut
 echo.
 echo Creating desktop shortcut...
-set DESKTOP=%USERPROFILE%\Desktop
-set SHORTCUT_FILE=%DESKTOP%\KPAstrologyDashboard.lnk
-set ICON_PATH=%INSTALL_DIR%\resources\favicon.ico
+set DESKTOP_DIR=%USERPROFILE%\Desktop
+set APP_DIR=%INSTALL_DIR%
+set SHORTCUT=%DESKTOP_DIR%\KPAstrologyDashboard.lnk
+set ICON_PATH=%APP_DIR%\resources\favicon.ico
 
-:: Create VBScript to make the shortcut with icon
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%TEMP%\createShortcut.vbs"
-echo sLinkFile = "%SHORTCUT_FILE%" >> "%TEMP%\createShortcut.vbs"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%TEMP%\createShortcut.vbs"
-echo oLink.TargetPath = "cmd.exe" >> "%TEMP%\createShortcut.vbs"
-echo oLink.Arguments = "/c cd /d ""%INSTALL_DIR%"" && python main.py" >> "%TEMP%\createShortcut.vbs"
-echo oLink.Description = "KP Astrology Dashboard" >> "%TEMP%\createShortcut.vbs"
-echo oLink.WorkingDirectory = "%INSTALL_DIR%" >> "%TEMP%\createShortcut.vbs"
-echo oLink.IconLocation = "%ICON_PATH%" >> "%TEMP%\createShortcut.vbs"
-echo oLink.Save >> "%TEMP%\createShortcut.vbs"
-
-:: Run the VBScript to create the shortcut
-cscript //nologo "%TEMP%\createShortcut.vbs"
-del "%TEMP%\createShortcut.vbs"
+:: Create shortcut using PowerShell
+powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = 'python'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
 
 echo.
 echo Installation completed successfully!
 echo KP Astrology Dashboard has been installed to: %INSTALL_DIR%
 echo You can now run KP Astrology Dashboard from your desktop.
 echo.
+
 pause 
