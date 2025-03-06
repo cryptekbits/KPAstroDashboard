@@ -2,7 +2,7 @@
 
 | Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
 | :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
-| `master` | ![version](https://img.shields.io/badge/version-1.1.3-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| `master` | ![version](https://img.shields.io/badge/version-1.3.0-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
 | `develop` | ![version](https://img.shields.io/badge/version-dev-orange) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
 
 # KP Astrology Dashboard
@@ -206,7 +206,7 @@ When cross-compiling the application (especially on Apple Silicon Macs), you mig
 
 ## Latest Version
 
-Current Version: 1.0.3 (Alpha Release)
+Current Version: 1.3.0 (Ephemeris Handling & UX Improvements Release)
 Build Date: 2025-06-13
 
 ## Repository Information
