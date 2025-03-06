@@ -19,7 +19,7 @@ import requests
 from packaging import version
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtWidgets import QMessageBox
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Import version information
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
@@ -29,6 +29,8 @@ from version import VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
 # GitHub API URL for branches
 GITHUB_BRANCHES_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/branches/"
+# GitHub API URL for tags
+GITHUB_TAGS_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/tags"
 
 # Current version
 CURRENT_VERSION = VERSION
@@ -102,27 +104,73 @@ class UpdateChecker(QObject):
     def check_develop_branch(self):
         """Check if the develop branch has newer commits than current version"""
         try:
+            # Get the latest tag first
+            response = requests.get(f"{GITHUB_TAGS_API_URL}?per_page=1", timeout=10)
+            response.raise_for_status()
+            
+            tags = response.json()
+            if not tags:
+                self.logger.warning("No tags found in the repository")
+                # No tags available, check if develop branch has commits
+                self._check_develop_branch_commits()
+                return
+                
+            # Get the latest tag details
+            latest_tag = tags[0]
+            latest_tag_name = latest_tag['name']
+            self.logger.info(f"Latest tag: {latest_tag_name}")
+            
+            # Clean up version strings for comparison
+            latest_tag_version = latest_tag_name.lstrip('v')
+            current_clean_version = CURRENT_VERSION.split('-')[0]  # Remove any -dev suffix
+            
+            # If current version is not the latest tag, we don't need to check develop
+            if self._is_newer_version(latest_tag_version, current_clean_version):
+                self.logger.info(f"There's already a newer tag available: {latest_tag_name}")
+                return
+                
+            # Current version is latest tag, check if develop branch is ahead
+            self._check_develop_branch_commits()
+                
+        except Exception as e:
+            self.logger.error(f"Error checking develop branch: {str(e)}")
+            
+    def _check_develop_branch_commits(self):
+        """Check if the develop branch has commits newer than the latest tag"""
+        try:
             # Get develop branch information
             response = requests.get(f"{GITHUB_BRANCHES_API_URL}develop", timeout=10)
             response.raise_for_status()
             
             develop_branch = response.json()
+            latest_commit_sha = develop_branch['commit']['sha']
             latest_commit_date = develop_branch['commit']['commit']['author']['date']
             
-            # Convert to datetime
+            # Get the latest release information
+            response = requests.get(GITHUB_API_URL, timeout=10)
+            response.raise_for_status()
+            
+            release_info = response.json()
+            release_date = release_info.get('published_at')
+            
+            if not release_date:
+                self.logger.warning("No release date found, assuming develop branch has updates")
+                self.dev_update_available.emit()
+                return
+                
+            # Convert dates to datetime objects
             commit_date = datetime.strptime(latest_commit_date, "%Y-%m-%dT%H:%M:%SZ")
+            release_date = datetime.strptime(release_date, "%Y-%m-%dT%H:%M:%SZ")
             
-            # Compare with build date
-            current_build_date = datetime.strptime(BUILD_DATE, "%Y-%m-%d")
-            
-            if commit_date > current_build_date:
+            # Check if the develop branch has newer commits than the latest release
+            if commit_date > release_date:
                 self.logger.info(f"Develop branch has newer commits: {latest_commit_date}")
                 self.dev_update_available.emit()
             else:
-                self.logger.info("Develop branch is not ahead of current version")
+                self.logger.info("Develop branch is not ahead of latest release")
                 
         except Exception as e:
-            self.logger.error(f"Error checking develop branch: {str(e)}")
+            self.logger.error(f"Error checking develop branch commits: {str(e)}")
     
     def _is_newer_version(self, latest_version, current_version):
         """
