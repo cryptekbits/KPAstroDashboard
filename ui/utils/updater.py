@@ -19,6 +19,7 @@ import requests
 from packaging import version
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtWidgets import QMessageBox
+from datetime import datetime
 
 # Import version information
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
@@ -26,6 +27,8 @@ from version import VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
 
 # GitHub API URL
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
+# GitHub API URL for branches
+GITHUB_BRANCHES_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/branches/"
 
 # Current version
 CURRENT_VERSION = VERSION
@@ -59,6 +62,7 @@ class UpdateChecker(QObject):
     """Class to check for updates from GitHub releases"""
     update_available = pyqtSignal(str, str)  # version, download_url
     update_not_available = pyqtSignal()
+    dev_update_available = pyqtSignal()  # Signal for when a dev update could be available
     error_occurred = pyqtSignal(str)
     
     def __init__(self):
@@ -86,12 +90,39 @@ class UpdateChecker(QObject):
                 self.logger.info(f"New version available: {latest_version}")
                 self.update_available.emit(latest_version, download_url)
             else:
-                self.logger.info("No new version available")
+                self.logger.info("No new version available, checking if develop branch is ahead...")
                 self.update_not_available.emit()
+                # Check if the develop branch is ahead
+                self.check_develop_branch()
                 
         except Exception as e:
             self.logger.error(f"Error checking for updates: {str(e)}")
             self.error_occurred.emit(f"Error checking for updates: {str(e)}")
+    
+    def check_develop_branch(self):
+        """Check if the develop branch has newer commits than current version"""
+        try:
+            # Get develop branch information
+            response = requests.get(f"{GITHUB_BRANCHES_API_URL}develop", timeout=10)
+            response.raise_for_status()
+            
+            develop_branch = response.json()
+            latest_commit_date = develop_branch['commit']['commit']['author']['date']
+            
+            # Convert to datetime
+            commit_date = datetime.strptime(latest_commit_date, "%Y-%m-%dT%H:%M:%SZ")
+            
+            # Compare with build date
+            current_build_date = datetime.strptime(BUILD_DATE, "%Y-%m-%d")
+            
+            if commit_date > current_build_date:
+                self.logger.info(f"Develop branch has newer commits: {latest_commit_date}")
+                self.dev_update_available.emit()
+            else:
+                self.logger.info("Develop branch is not ahead of current version")
+                
+        except Exception as e:
+            self.logger.error(f"Error checking develop branch: {str(e)}")
     
     def _is_newer_version(self, latest_version, current_version):
         """
@@ -99,12 +130,14 @@ class UpdateChecker(QObject):
         Uses packaging.version for robust comparison.
         """
         try:
-            return version.parse(latest_version) > version.parse(current_version)
+            # Remove development suffix for comparison
+            current_clean = current_version.split('-')[0]  
+            return version.parse(latest_version) > version.parse(current_clean)
         except Exception as e:
             self.logger.error(f"Error comparing versions: {str(e)}")
             # Fall back to simple string comparison if packaging.version fails
             latest_parts = [int(x) for x in latest_version.split('.')]
-            current_parts = [int(x) for x in current_version.split('.')]
+            current_parts = [int(x) for x in current_version.split('-')[0].split('.')]
             
             for i in range(max(len(latest_parts), len(current_parts))):
                 latest_part = latest_parts[i] if i < len(latest_parts) else 0
@@ -130,11 +163,14 @@ class UpdateDownloader(QObject):
         self.logger = logging.getLogger(__name__)
         self.temp_dir = tempfile.mkdtemp()
         self.update_zip = None
+        self.is_dev_version = False
     
     def download_update(self, download_url):
         """Download the update from the specified URL"""
         try:
-            self.logger.info(f"Downloading update from: {download_url}")
+            # Check if this is a development version
+            self.is_dev_version = "heads/develop" in download_url
+            self.logger.info(f"Downloading update from: {download_url} (Development version: {self.is_dev_version})")
             
             # Create a temporary file to download to
             self.update_zip = os.path.join(self.temp_dir, "update.zip")
@@ -175,6 +211,11 @@ class UpdateDownloader(QObject):
             if nested_dirs:
                 # Use the first directory found (should be the only one)
                 nested_dir = os.path.join(extract_dir, nested_dirs[0])
+                
+                # If it's a development version, update the version file
+                if self.is_dev_version:
+                    self._update_version_for_dev_build(nested_dir)
+                
                 # Use this as the update source directory
                 self.download_complete.emit(nested_dir)
             else:
@@ -183,6 +224,43 @@ class UpdateDownloader(QObject):
         except Exception as e:
             self.logger.error(f"Error downloading update: {str(e)}")
             self.error_occurred.emit(f"Error downloading update: {str(e)}")
+    
+    def _update_version_for_dev_build(self, update_dir):
+        """Update the version.py file to indicate this is a development build"""
+        try:
+            version_file = os.path.join(update_dir, "version.py")
+            if os.path.exists(version_file):
+                with open(version_file, 'r') as f:
+                    content = f.read()
+                
+                # Get current date in YYYY.MM.DD format
+                today = datetime.now().strftime("%Y.%m.%d")
+                
+                # Update version string to include dev suffix
+                import re
+                # Find the VERSION line
+                version_pattern = r'VERSION\s*=\s*\"([^\"]+)\"'
+                version_match = re.search(version_pattern, content)
+                if version_match:
+                    current_version = version_match.group(1)
+                    # Remove any existing dev tag first
+                    base_version = current_version.split('-')[0]
+                    new_version = f"{today}-dev"
+                    
+                    # Replace version
+                    content = re.sub(version_pattern, f'VERSION = "{new_version}"', content)
+                    
+                    # Update BUILD_DATE
+                    date_pattern = r'BUILD_DATE\s*=\s*\"([^\"]+)\"'
+                    content = re.sub(date_pattern, f'BUILD_DATE = "{datetime.now().strftime("%Y-%m-%d")}"', content)
+                    
+                    # Write back the file
+                    with open(version_file, 'w') as f:
+                        f.write(content)
+                    
+                    self.logger.info(f"Updated version to development build: {new_version}")
+        except Exception as e:
+            self.logger.error(f"Error updating version for dev build: {str(e)}")
     
     def apply_update(self, download_path):
         """
@@ -484,11 +562,13 @@ def check_for_updates_on_startup(window):
     # Connect signals
     update_thread.started.connect(update_checker.check_for_updates)
     update_checker.update_available.connect(lambda version, url: show_update_dialog(window, version, url))
+    update_checker.dev_update_available.connect(lambda: show_dev_update_dialog(window))
     
     # Clean up when done
     update_checker.update_available.connect(update_thread.quit)
     update_checker.update_not_available.connect(update_thread.quit)
     update_checker.error_occurred.connect(update_thread.quit)
+    update_checker.dev_update_available.connect(update_thread.quit)
     
     update_thread.finished.connect(lambda: _cleanup_thread(update_thread, update_checker))
     
@@ -523,6 +603,26 @@ def show_update_dialog(parent_window, version, download_url):
     
     if msg_box.exec_() == QMessageBox.Yes:
         download_and_install_update(parent_window, download_url)
+
+
+def show_dev_update_dialog(parent_window):
+    """
+    Show a dialog asking the user if they want to update to the development version.
+    
+    Args:
+        parent_window: The main application window
+    """
+    msg_box = QMessageBox(parent_window)
+    msg_box.setWindowTitle("Development Version Available")
+    msg_box.setText("No new stable release is available, but a newer development version exists.")
+    msg_box.setInformativeText("Would you like to download and install the latest development version? Development versions may contain new features but could also have bugs.")
+    msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    msg_box.setDefaultButton(QMessageBox.No)  # Default to No for dev versions
+    
+    if msg_box.exec_() == QMessageBox.Yes:
+        # Create URL for the develop branch
+        dev_download_url = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/archive/refs/heads/develop.zip"
+        download_and_install_update(parent_window, dev_download_url)
 
 
 def download_and_install_update(parent_window, download_url):
@@ -579,8 +679,14 @@ def handle_download_complete(parent_window, download_path, downloader, progress)
     # Show a message to the user
     msg_box = QMessageBox(parent_window)
     msg_box.setWindowTitle("Update Ready")
-    msg_box.setText("The update has been downloaded and is ready to install.")
-    msg_box.setInformativeText("The application will close and restart with the new version. Your preferences will be preserved. Continue?")
+    
+    if downloader.is_dev_version:
+        msg_box.setText("The development update has been downloaded and is ready to install.")
+        msg_box.setInformativeText("The application will close and restart with the development version. Note that development versions may be less stable. Your preferences will be preserved. Continue?")
+    else:
+        msg_box.setText("The update has been downloaded and is ready to install.")
+        msg_box.setInformativeText("The application will close and restart with the new version. Your preferences will be preserved. Continue?")
+    
     msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     msg_box.setDefaultButton(QMessageBox.Yes)
     

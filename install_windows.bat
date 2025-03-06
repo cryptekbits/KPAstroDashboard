@@ -104,12 +104,102 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo Installing required packages...
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+
+:: First try to install pyswisseph from pre-built wheels
+echo Installing pyswisseph from pre-built wheels...
+python -m pip install --only-binary=:all: pyswisseph==2.10.3.post2 --no-deps
+
+if %ERRORLEVEL% NEQ 0 (
+    echo Pre-built wheel for pyswisseph not available for your system.
+    echo Attempting to use alternative installation methods...
+    
+    :: Try pip wheel from unofficial wheel repository (many libraries have pre-built wheels here)
+    echo Trying unofficial wheel repository...
+    python -m pip install pyswisseph==2.10.3.post2 --no-deps --index-url https://www.lfd.uci.edu/~gohlke/pythonlibs/ || (
+        echo Unofficial wheel repository failed.
+        
+        :: Try conda-forge if conda is available
+        where conda >nul 2>nul
+        if %ERRORLEVEL% EQU 0 (
+            echo Trying conda-forge...
+            conda install -y -c conda-forge pyswisseph || (
+                echo Conda-forge installation failed.
+                
+                :: Show failure message with instructions
+                echo.
+                echo ===================================================================
+                echo WARNING: Could not install pyswisseph automatically.
+                echo.
+                echo The application may not work correctly without this package.
+                echo.
+                echo To install manually, you will need to:
+                echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
+                echo 2. Run: pip install pyswisseph==2.10.3.post2
+                echo ===================================================================
+                echo.
+            )
+        ) else (
+            :: Show failure message with instructions
+            echo.
+            echo ===================================================================
+            echo WARNING: Could not install pyswisseph automatically.
+            echo.
+            echo The application may not work correctly without this package.
+            echo.
+            echo To install manually, you will need to:
+            echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
+            echo 2. Run: pip install pyswisseph==2.10.3.post2
+            echo ===================================================================
+            echo.
+        )
+    )
+) else (
+    echo Successfully installed pyswisseph from pre-built wheel.
+)
+
+:: Install the rest of the packages
+echo Installing remaining packages...
+python -m pip install -r requirements.txt --no-deps  
+python -m pip install -e .
 
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to install required packages.
     pause
     exit /b 1
+)
+
+:: Now ensure Swiss Ephemeris files are downloaded and in the right place
+echo.
+echo Setting up Swiss Ephemeris files...
+set SWEFILES_DIR=%INSTALL_DIR%\flatlib\resources\swefiles
+
+:: Check if directory exists, create if not
+if not exist "%SWEFILES_DIR%" mkdir "%SWEFILES_DIR%"
+
+:: Check for required files
+set "MISSING_FILES=false"
+for %%F in (seas_18.se1 sepl_18.se1 semo_18.se1 fixstars.cat) do (
+    if not exist "%SWEFILES_DIR%\%%F" (
+        set "MISSING_FILES=true"
+    )
+)
+
+:: Download files if missing
+if "%MISSING_FILES%"=="true" (
+    echo Swiss Ephemeris files are missing, downloading them...
+    for %%F in (seas_18.se1 sepl_18.se1 semo_18.se1 fixstars.cat) do (
+        if not exist "%SWEFILES_DIR%\%%F" (
+            echo Downloading %%F...
+            powershell -Command "Invoke-WebRequest -Uri 'https://github.com/aloistr/swisseph/raw/master/ephe/%%F' -OutFile '%SWEFILES_DIR%\%%F'"
+            
+            if %ERRORLEVEL% NEQ 0 (
+                echo Failed to download %%F, will try alternative source...
+                powershell -Command "Invoke-WebRequest -Uri 'https://github.com/flatangle/flatlib/raw/master/flatlib/resources/swefiles/%%F' -OutFile '%SWEFILES_DIR%\%%F'"
+            )
+        )
+    )
+) else (
+    echo Swiss Ephemeris files are already present.
 )
 
 :: Create desktop shortcut with icon
