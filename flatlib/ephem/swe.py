@@ -13,6 +13,7 @@
 
 import swisseph
 import platform
+import logging
 from flatlib import angle
 from flatlib import const
 
@@ -83,9 +84,13 @@ SEFLG_SIDEREAL = 64 * 1024
 
 def setPath(path):
     """ Sets the path for the swe files. """
+    logger = logging.getLogger(__name__)
+    
     # On Windows, ensure forward slashes for SwissEph compatibility
     if platform.system() == "Windows" and '\\' in path:
         path = path.replace('\\', '/')
+        
+    logger.info(f"Setting SwissEph path to: {path}")
     swisseph.set_ephe_path(path)
 
 

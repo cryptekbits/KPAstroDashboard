@@ -11,7 +11,10 @@
             "Position": true,
             "Retrograde": true,
             "House": true,
-            "KP Pointer": true
+            "KP Pointer": true,
+            "Digbala (0-60)": true,
+            "Sthanabala (30-210)": true,
+            "Shadbala (35-330)": true
         },
         "planets": {
             "Sun": true,
@@ -25,7 +28,7 @@
             "Ketu": true,
             "Uranus": true,
             "Neptune": true,
-            "Ascendant": false
+            "Ascendant": true
         }
     },
     "hora": {
@@ -57,10 +60,10 @@
         "aspect_list": {
             "0": true,
             "30": true,
-            "60": false,
+            "60": true,
             "90": true,
             "120": true,
-            "150": false,
+            "150": true,
             "180": true
         },
         "aspect_planets": {
@@ -74,8 +77,8 @@
             "Rahu": true,
             "Ketu": true,
             "Ascendant": false,
-            "Uranus": false,
-            "Neptune": false
+            "Uranus": true,
+            "Neptune": true
         }
     },
     "yoga": {
@@ -128,7 +131,6 @@
             "Planet Positions",
             "Hora Timing",
             "Moon",
-            "Ascendant",
             "Sun",
             "Mercury",
             "Venus",
