@@ -2,8 +2,8 @@
 
 | Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
 | :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
-| `master` | ![version](https://img.shields.io/badge/version-1.5.1-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
-| `develop` | ![version](https://img.shields.io/badge/version-dev-orange) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| `master` | ![version](https://img.shields.io/badge/version-1.5.2-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| `develop` | ![version](https://img.shields.io/badge/version-1.5.2-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
 
 # KP Astrology Dashboard
 
