@@ -75,6 +75,10 @@ def main():
     # Determine target platform and architecture
     target_platform = current_platform if args.target_platform == "auto" else args.target_platform
     target_arch = current_arch if args.target_arch == "auto" else args.target_arch
+
+    if target_platform == "windows":
+        print("Windows build has been removed. Exiting.")
+        sys.exit(0)
     
     # Check if we're building for a different platform than the current one
     if target_platform != current_platform or target_arch != current_arch:

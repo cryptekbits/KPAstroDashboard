@@ -420,38 +420,8 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             chmod_plus_x(command_path)
             print(f"Prepared macOS installers: {target_path} and {command_path}")
             
-        # Windows executable
-        windows_exes = list(artifacts_dir.glob("**/windows-executable/*.exe"))
-        if not windows_exes:
-            # Try a more flexible search pattern
-            windows_exes = list(artifacts_dir.glob("**/*.exe"))
-            print(f"Using flexible search pattern for Windows executable, found {len(windows_exes)} files")
-            
-        if windows_exes:
-            win_exe = windows_exes[0]
-            target_path = release_dir / f"KPAstrologyDashboard-{version}.exe"
-            shutil.copy(win_exe, target_path)
-            print(f"Prepared Windows executable: {target_path}")
-        else:
-            print("WARNING: No Windows executable found!")
-            
-        # Windows executable ZIP
-        windows_exe_zips = list(artifacts_dir.glob("**/windows-executable-zip/*.zip"))
-        if not windows_exe_zips:
-            # Try a more flexible search pattern, but exclude source-code.zip
-            windows_exe_zips = [
-                zip_file for zip_file in artifacts_dir.glob("**/*.zip") 
-                if "source-code" not in str(zip_file)
-            ]
-            print(f"Using flexible search pattern for Windows executable ZIP, found {len(windows_exe_zips)} files")
-            
-        if windows_exe_zips:
-            win_exe_zip = windows_exe_zips[0]
-            target_path = release_dir / f"KPAstrologyDashboard-{version}-Windows.zip"
-            shutil.copy(win_exe_zip, target_path)
-            print(f"Prepared Windows executable ZIP: {target_path}")
-        else:
-            print("WARNING: No Windows executable ZIP found!")
+        # Windows executable build is disabled; skipping copying Windows artifacts.
+        print("Skipping Windows executable and ZIP artifact copy as Windows build has been removed.")
         
         return True
     except Exception as e:
