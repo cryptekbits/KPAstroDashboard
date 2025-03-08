@@ -14,32 +14,62 @@ set REQUIRED_PYTHON_VERSION=3.13.2
 
 :: Detect Desktop and Downloads directories (handle OneDrive case)
 echo Detecting user directories...
-:: Primary Desktop
+
+:: Primary Desktop - try standard location first
 set "DESKTOP_DIR=%USERPROFILE%\Desktop"
-:: Primary Downloads
+if not exist "%DESKTOP_DIR%" (
+    echo WARNING: Standard Desktop not found at %DESKTOP_DIR%
+    
+    :: Try alternate locations
+    if exist "%USERPROFILE%\OneDrive\Desktop" (
+        set "DESKTOP_DIR=%USERPROFILE%\OneDrive\Desktop"
+        echo Using OneDrive Desktop as primary: %DESKTOP_DIR%
+    ) else if exist "%USERPROFILE%\Documents\Desktop" (
+        set "DESKTOP_DIR=%USERPROFILE%\Documents\Desktop"
+        echo Using Documents\Desktop as primary: %DESKTOP_DIR%
+    ) else (
+        echo WARNING: Could not find a valid Desktop directory!
+        echo Will default to %USERPROFILE%\Desktop but shortcuts may fail.
+        set "DESKTOP_DIR=%USERPROFILE%\Desktop"
+    )
+) else (
+    echo Found standard Desktop at: %DESKTOP_DIR%
+)
+
+:: Primary Downloads - try standard location first
 set "DOWNLOADS_DIR=%USERPROFILE%\Downloads"
+if not exist "%DOWNLOADS_DIR%" (
+    echo WARNING: Standard Downloads not found at %DOWNLOADS_DIR%
+    
+    :: Try alternate locations
+    if exist "%USERPROFILE%\OneDrive\Downloads" (
+        set "DOWNLOADS_DIR=%USERPROFILE%\OneDrive\Downloads"
+        echo Using OneDrive Downloads: %DOWNLOADS_DIR%
+    ) else (
+        echo WARNING: Could not find a valid Downloads directory!
+        echo Will default to %USERPROFILE%\Downloads, downloads may fail.
+    )
+) else (
+    echo Found standard Downloads at: %DOWNLOADS_DIR%
+)
 
-:: Check for OneDrive Desktop
-set "ONEDRIVE_DESKTOP=%USERPROFILE%\OneDrive\Desktop"
+:: Check for OneDrive Desktop as secondary location (if primary is not OneDrive)
 set "HAS_ONEDRIVE_DESKTOP=false"
-if exist "%ONEDRIVE_DESKTOP%" (
-    echo OneDrive Desktop detected at: %ONEDRIVE_DESKTOP%
-    set "HAS_ONEDRIVE_DESKTOP=true"
+set "ONEDRIVE_DESKTOP=%USERPROFILE%\OneDrive\Desktop"
+if "%DESKTOP_DIR%" NEQ "%ONEDRIVE_DESKTOP%" (
+    if exist "%ONEDRIVE_DESKTOP%" (
+        echo Found secondary OneDrive Desktop at: %ONEDRIVE_DESKTOP%
+        set "HAS_ONEDRIVE_DESKTOP=true"
+    )
 )
 
-:: Check for other potential Desktop locations
+:: Check for other potential Desktop locations as secondary (if not already primary)
 set "OTHER_DESKTOP="
-:: Check Documents\Desktop
 if exist "%USERPROFILE%\Documents\Desktop" (
-    set "OTHER_DESKTOP=%USERPROFILE%\Documents\Desktop"
-    echo Additional Desktop detected at: !OTHER_DESKTOP!
-)
-
-:: Check for OneDrive Downloads
-set "ONEDRIVE_DOWNLOADS=%USERPROFILE%\OneDrive\Downloads"
-if exist "%ONEDRIVE_DOWNLOADS%" (
-    echo OneDrive Downloads detected at: %ONEDRIVE_DOWNLOADS%
-    set "DOWNLOADS_DIR=%ONEDRIVE_DOWNLOADS%"
+    if "%DESKTOP_DIR%" NEQ "%USERPROFILE%\Documents\Desktop" (
+        set "OTHER_DESKTOP=%USERPROFILE%\Documents\Desktop"
+        echo Found additional Desktop at: !OTHER_DESKTOP!
+    )
 )
 
 :: Set installation directory on primary Desktop
@@ -444,28 +474,53 @@ echo Creating desktop shortcuts...
 set APP_DIR=%INSTALL_DIR%
 set ICON_PATH=%APP_DIR%\resources\favicon.ico
 
+:: Check if resources and icon exist
+if not exist "%APP_DIR%\resources" (
+    echo WARNING: Resources folder not found at %APP_DIR%\resources
+    mkdir "%APP_DIR%\resources" 2>nul
+    echo Created resources directory.
+)
+
+if not exist "%ICON_PATH%" (
+    echo WARNING: Favicon not found at %ICON_PATH%
+    echo Using default Windows icon instead.
+    set "ICON_PATH=%SystemRoot%\System32\shell32.dll,0"
+)
+
 :: Create shortcut on primary Desktop
 set SHORTCUT=%DESKTOP_DIR%\KPAstrologyDashboard.lnk
-echo Creating shortcut at: %SHORTCUT%
-powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
+if exist "%DESKTOP_DIR%" (
+    echo Creating shortcut at: %SHORTCUT%
+    powershell -Command "& { try { $WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save(); Write-Host 'Primary desktop shortcut created successfully.' -ForegroundColor Green; } catch { Write-Host ('Error creating shortcut: ' + $_.Exception.Message) -ForegroundColor Red; } }"
+) else (
+    echo WARNING: Primary Desktop not found at %DESKTOP_DIR%. Skipping shortcut creation.
+)
 
 :: Create shortcut on OneDrive Desktop if it exists
 if "!HAS_ONEDRIVE_DESKTOP!"=="true" (
-    set ONEDRIVE_SHORTCUT=%ONEDRIVE_DESKTOP%\KPAstrologyDashboard.lnk
-    echo Creating shortcut at: %ONEDRIVE_SHORTCUT%
-    powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%ONEDRIVE_SHORTCUT%'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
-    
-    :: Also create a shortcut to the application folder on OneDrive Desktop
-    set FOLDER_SHORTCUT=%ONEDRIVE_DESKTOP%\KPAstrologyDashboard-Folder.lnk
-    echo Creating folder shortcut at: %FOLDER_SHORTCUT%
-    powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%FOLDER_SHORTCUT%'); $Shortcut.TargetPath = '%APP_DIR%'; $Shortcut.Save()"
+    if exist "%ONEDRIVE_DESKTOP%" (
+        set ONEDRIVE_SHORTCUT=%ONEDRIVE_DESKTOP%\KPAstrologyDashboard.lnk
+        echo Creating shortcut at: !ONEDRIVE_SHORTCUT!
+        powershell -Command "& { try { $WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('!ONEDRIVE_SHORTCUT!'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save(); Write-Host 'OneDrive desktop shortcut created successfully.' -ForegroundColor Green; } catch { Write-Host ('Error creating OneDrive shortcut: ' + $_.Exception.Message) -ForegroundColor Red; } }"
+        
+        :: Also create a shortcut to the application folder on OneDrive Desktop
+        set FOLDER_SHORTCUT=!ONEDRIVE_DESKTOP!\KPAstrologyDashboard-Folder.lnk
+        echo Creating folder shortcut at: !FOLDER_SHORTCUT!
+        powershell -Command "& { try { $WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('!FOLDER_SHORTCUT!'); $Shortcut.TargetPath = '%APP_DIR%'; $Shortcut.Save(); Write-Host 'Folder shortcut created successfully.' -ForegroundColor Green; } catch { Write-Host ('Error creating folder shortcut: ' + $_.Exception.Message) -ForegroundColor Red; } }"
+    ) else (
+        echo WARNING: OneDrive Desktop was detected earlier but not found at %ONEDRIVE_DESKTOP%. Skipping OneDrive shortcut creation.
+    )
 )
 
 :: Create shortcut on other Desktop location if detected
 if not "!OTHER_DESKTOP!"=="" (
-    set OTHER_SHORTCUT=!OTHER_DESKTOP!\KPAstrologyDashboard.lnk
-    echo Creating shortcut at: !OTHER_SHORTCUT!
-    powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('!OTHER_SHORTCUT!'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
+    if exist "!OTHER_DESKTOP!" (
+        set OTHER_SHORTCUT=!OTHER_DESKTOP!\KPAstrologyDashboard.lnk
+        echo Creating shortcut at: !OTHER_SHORTCUT!
+        powershell -Command "& { try { $WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('!OTHER_SHORTCUT!'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save(); Write-Host 'Additional desktop shortcut created successfully.' -ForegroundColor Green; } catch { Write-Host ('Error creating additional shortcut: ' + $_.Exception.Message) -ForegroundColor Red; } }"
+    ) else (
+        echo WARNING: Additional Desktop was detected earlier but not found at !OTHER_DESKTOP!. Skipping additional shortcut creation.
+    )
 )
 
 echo.
