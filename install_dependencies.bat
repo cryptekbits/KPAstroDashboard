@@ -15,6 +15,26 @@ set INSTALL_DIR=%INSTALL_DIR:~0,-1%
 echo Installation directory: %INSTALL_DIR%
 echo.
 
+:: Check for and uninstall existing flatlib and pyswisseph
+echo Checking for existing flatlib and pyswisseph installations...
+python -m pip show flatlib >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo Removing existing flatlib installation...
+    python -m pip uninstall -y flatlib
+    echo Flatlib removed successfully.
+) else (
+    echo Flatlib not found.
+)
+
+python -m pip show pyswisseph >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo Removing existing pyswisseph installation...
+    python -m pip uninstall -y pyswisseph
+    echo Pyswisseph removed successfully.
+) else (
+    echo Pyswisseph not found.
+)
+
 echo Step 1: Installing pyswisseph...
 python -m pip install --upgrade pip
 
@@ -45,97 +65,36 @@ if defined CP_VER (
             echo Successfully installed pyswisseph from local wheel.
             goto setup_ephemeris
         ) else (
-            echo Failed to install from local wheel, trying alternative methods...
+            echo Failed to install from local wheel.
+            echo Please check that the wheel file is not corrupted.
+            pause
+            exit /b 1
         )
     ) else (
         echo No matching local wheel found for Python %PYTHON_VERSION% on %ARCH%
-    )
-)
-
-:: First try to install pyswisseph from pre-built wheels online
-echo Attempting to install pyswisseph from online pre-built wheels...
-python -m pip install --only-binary=:all: pyswisseph==2.10.3.2
-
-if %ERRORLEVEL% NEQ 0 (
-    echo Pre-built wheel for pyswisseph not available for your system.
-    echo.
-    echo Would you like to:
-    echo 1. Try alternative installation methods
-    echo 2. Try to install using pip (requires Visual Studio Build Tools)
-    echo 3. Skip installation of pyswisseph
-    echo.
-    
-    set /p CHOICE=Enter your choice (1, 2, or 3): 
-    
-    if "!CHOICE!"=="1" (
-        echo Trying unofficial wheel repository...
-        python -m pip install pyswisseph==2.10.3.2 --no-deps --index-url https://www.lfd.uci.edu/~gohlke/pythonlibs/
-        
-        if %ERRORLEVEL% NEQ 0 (
-            echo Unofficial wheel repository failed.
-            
-            :: Try conda-forge if conda is available
-            where conda >nul 2>nul
-            if %ERRORLEVEL% EQU 0 (
-                echo Trying conda-forge...
-                conda install -y -c conda-forge pyswisseph
-                
-                if %ERRORLEVEL% NEQ 0 (
-                    echo Conda-forge installation failed.
-                    echo.
-                    echo Failed to install pyswisseph using alternative methods.
-                    echo.
-                    echo To install manually, you will need to:
-                    echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
-                    echo 2. Run: pip install pyswisseph==2.10.3.2
-                    echo.
-                ) else (
-                    echo Successfully installed pyswisseph using conda-forge.
-                )
-            ) else (
-                echo Conda not found. Cannot try conda-forge.
-                echo.
-                echo Failed to install pyswisseph using alternative methods.
-                echo.
-                echo To install manually, you will need to:
-                echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
-                echo 2. Run: pip install pyswisseph==2.10.3.2
-                echo.
-            )
-        ) else (
-            echo Successfully installed pyswisseph from unofficial wheel repository.
-        )
-    ) else if "!CHOICE!"=="2" (
-        echo Trying to install with pip (this may fail if you don't have Visual Studio Build Tools)...
-        python -m pip install pyswisseph==2.10.3.2
-        
-        if %ERRORLEVEL% NEQ 0 (
-            echo.
-            echo Failed to install pyswisseph.
-            echo.
-            echo To install manually, you will need to:
-            echo 1. Install Visual Studio Build Tools 2022 with C++ development tools
-            echo 2. Run: pip install pyswisseph==2.10.3.2
-            echo.
-        ) else (
-            echo Successfully installed pyswisseph.
-        )
-    ) else (
-        echo Skipping pyswisseph installation.
+        echo Expected wheel path: %WHEEL_PATH%
+        echo Please ensure the appropriate wheel is available for your system.
+        pause
+        exit /b 1
     )
 ) else (
-    echo Successfully installed pyswisseph from online pre-built wheel.
+    echo Unsupported Python version: %PYTHON_VERSION%
+    echo Please install a supported Python version (3.9-3.13).
+    pause
+    exit /b 1
 )
 
 :setup_ephemeris
 echo.
 echo Step 2: Setting up Swiss Ephemeris files...
 set SWEFILES_DIR=%INSTALL_DIR%\flatlib\resources\swefiles
+set SYSTEM_SWEFILES_DIR=C:\sweph\ephe
 
 :: Check if directory exists, create if not
 if not exist "%SWEFILES_DIR%" (
-    echo Creating directory for ephemeris files...
-    mkdir "%SWEFILES_DIR%"
+    echo Error: Swiss Ephemeris files directory not found at %SWEFILES_DIR%
+    echo Please ensure the application is installed correctly.
+    goto end_ephemeris
 )
 
 :: Required files
@@ -153,64 +112,76 @@ for %%F in (%REQUIRED_FILES%) do (
     )
 )
 
-:: Download files if missing
 if "%MISSING_FILES%"=="true" (
     echo.
-    echo Some ephemeris files are missing. Would you like to download them now? (Y/N)
-    set /p DOWNLOAD_CHOICE=Your choice: 
-    
-    if /i "!DOWNLOAD_CHOICE!"=="Y" (
-        echo Downloading missing ephemeris files...
-        
-        for %%F in (%REQUIRED_FILES%) do (
-            if not exist "%SWEFILES_DIR%\%%F" (
-                echo Downloading %%F...
-                
-                :: Try from official GitHub repo first
-                powershell -Command "Invoke-WebRequest -Uri 'https://github.com/aloistr/swisseph/raw/master/ephe/%%F' -OutFile '%SWEFILES_DIR%\%%F'"
-                
-                if %ERRORLEVEL% NEQ 0 (
-                    echo Failed from primary source, trying alternative...
-                    powershell -Command "Invoke-WebRequest -Uri 'https://github.com/flatangle/flatlib/raw/master/flatlib/resources/swefiles/%%F' -OutFile '%SWEFILES_DIR%\%%F'"
-                    
-                    if %ERRORLEVEL% NEQ 0 (
-                        echo Failed to download %%F from all sources.
-                    ) else (
-                        echo Downloaded %%F successfully from alternative source.
-                    )
-                ) else (
-                    echo Downloaded %%F successfully.
-                )
-            )
-        )
-        
-        echo.
-        echo Verifying downloaded files...
-        set "STILL_MISSING=false"
-        for %%F in (%REQUIRED_FILES%) do (
-            if not exist "%SWEFILES_DIR%\%%F" (
-                echo Still missing: %%F
-                set "STILL_MISSING=true"
-            ) else (
-                echo Verified: %%F
-            )
-        )
-        
-        if "%STILL_MISSING%"=="true" (
-            echo.
-            echo WARNING: Some files could not be downloaded. 
-            echo The application may not work correctly.
-        ) else (
-            echo.
-            echo All ephemeris files were successfully downloaded.
-        )
-    ) else (
-        echo Skipping ephemeris file download.
-    )
+    echo Some required Swiss Ephemeris files are missing from the source directory.
+    echo Please ensure the application package is complete.
+    goto end_ephemeris
 ) else (
-    echo All required ephemeris files are already present.
+    echo All required ephemeris files are present in the application directory.
 )
 
+:: Check if system-wide Swiss Ephemeris directory exists
+echo.
+echo Checking for system-wide Swiss Ephemeris directory...
+if not exist "%SYSTEM_SWEFILES_DIR%" (
+    echo System-wide Swiss Ephemeris directory not found.
+    echo Would you like to create it and copy the ephemeris files? (Y/N)
+    echo This will require administrator privileges.
+    set /p SYSTEM_CHOICE=Your choice: 
+    
+    if /i "!SYSTEM_CHOICE!"=="Y" (
+        :: Create a temporary admin script
+        echo @echo off > "%TEMP%\sweadmin.bat"
+        echo echo Creating system-wide Swiss Ephemeris directory... >> "%TEMP%\sweadmin.bat"
+        echo if not exist "%SYSTEM_SWEFILES_DIR%" mkdir "%SYSTEM_SWEFILES_DIR%" >> "%TEMP%\sweadmin.bat"
+        echo echo Copying ephemeris files... >> "%TEMP%\sweadmin.bat"
+        
+        for %%F in (%REQUIRED_FILES%) do (
+            echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
+        )
+        
+        echo echo. >> "%TEMP%\sweadmin.bat"
+        echo echo System-wide Swiss Ephemeris files setup complete. >> "%TEMP%\sweadmin.bat"
+        
+        :: Run the script with admin privileges
+        echo Requesting administrator privileges...
+        powershell -Command "Start-Process -FilePath '%TEMP%\sweadmin.bat' -Verb RunAs -Wait"
+        
+        :: Clean up
+        del "%TEMP%\sweadmin.bat"
+    ) else (
+        echo Skipping system-wide Swiss Ephemeris setup.
+    )
+) else (
+    echo System-wide Swiss Ephemeris directory already exists.
+    echo Would you like to update the ephemeris files? (Y/N)
+    set /p UPDATE_CHOICE=Your choice: 
+    
+    if /i "!UPDATE_CHOICE!"=="Y" (
+        :: Create a temporary admin script
+        echo @echo off > "%TEMP%\sweadmin.bat"
+        echo echo Updating system-wide Swiss Ephemeris files... >> "%TEMP%\sweadmin.bat"
+        
+        for %%F in (%REQUIRED_FILES%) do (
+            echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
+        )
+        
+        echo echo. >> "%TEMP%\sweadmin.bat"
+        echo echo System-wide Swiss Ephemeris files update complete. >> "%TEMP%\sweadmin.bat"
+        
+        :: Run the script with admin privileges
+        echo Requesting administrator privileges...
+        powershell -Command "Start-Process -FilePath '%TEMP%\sweadmin.bat' -Verb RunAs -Wait"
+        
+        :: Clean up
+        del "%TEMP%\sweadmin.bat"
+    ) else (
+        echo Skipping system-wide Swiss Ephemeris update.
+    )
+)
+
+:end_ephemeris
 echo.
 echo =====================================================
 echo Dependency installation process completed.

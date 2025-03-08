@@ -100,6 +100,100 @@ def ensure_ephemeris_files_exist():
 # Ensure Swiss Ephemeris files exist
 ensure_ephemeris_files_exist()
 
+def verify_swisseph_functionality(parent_window=None):
+    """
+    Verify Swiss Ephemeris functionality in the background.
+    If it fails, check if files exist and provide appropriate guidance.
+    """
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    swefiles_path = os.path.join(app_dir, 'flatlib', 'resources', 'swefiles')
+    system_swefiles_path = "C:\\sweph\\ephe" if platform.system() == "Windows" else "/usr/local/share/sweph/ephe"
+    
+    # Required files
+    required_files = ["seas_18.se1", "sepl_18.se1", "semo_18.se1", "fixstars.cat"]
+    
+    try:
+        # Try to use the Swiss Ephemeris functionality
+        import swisseph
+        from flatlib.ephem import swe
+        
+        # Test with a simple calculation using the sweObject function
+        test_jd = 2459000.5  # A random Julian date
+        test_obj = swe.sweObject('Sun', test_jd)
+        logging.info(f"SwissEph functionality test successful: {test_obj}")
+        return True
+    except Exception as e:
+        logging.error(f"SwissEph functionality test failed: {e}")
+        
+        # Check if files exist in the application directory
+        app_files_exist = all(os.path.isfile(os.path.join(swefiles_path, f)) for f in required_files)
+        
+        # Check if files exist in the system-wide directory
+        system_dir_exists = os.path.exists(system_swefiles_path)
+        system_files_exist = False
+        if system_dir_exists:
+            system_files_exist = all(os.path.isfile(os.path.join(system_swefiles_path, f)) for f in required_files)
+        
+        # Only show message if parent_window is provided (UI is running)
+        if parent_window:
+            if app_files_exist and not system_files_exist:
+                # Files exist in app directory but not in system directory
+                response = QMessageBox.warning(parent_window, "Swiss Ephemeris Configuration Issue", 
+                                  f"The Swiss Ephemeris files are present in the application directory but the library cannot access them.\n\n"
+                                  f"Would you like to copy these files to the system-wide location?\n"
+                                  f"This may require administrator privileges.",
+                                  QMessageBox.Yes | QMessageBox.No)
+                
+                # If user agrees, try to copy files to system directory
+                if response == QMessageBox.Yes:
+                    try:
+                        # Create system directory if it doesn't exist
+                        if not os.path.exists(system_swefiles_path):
+                            if platform.system() == "Windows":
+                                # Use PowerShell to run as admin
+                                import subprocess
+                                cmd = f'powershell -Command "Start-Process -FilePath \'cmd.exe\' -ArgumentList \'/c mkdir \"{system_swefiles_path}\"\' -Verb RunAs -Wait"'
+                                subprocess.run(cmd, shell=True)
+                            else:
+                                # Use sudo on macOS/Linux
+                                import subprocess
+                                cmd = f'sudo mkdir -p "{system_swefiles_path}"'
+                                subprocess.run(cmd, shell=True)
+                        
+                        # Copy files to system directory
+                        for file in required_files:
+                            src = os.path.join(swefiles_path, file)
+                            if os.path.exists(src):
+                                if platform.system() == "Windows":
+                                    cmd = f'powershell -Command "Start-Process -FilePath \'cmd.exe\' -ArgumentList \'/c copy \"{src}\" \"{os.path.join(system_swefiles_path, file)}\"\' -Verb RunAs -Wait"'
+                                    subprocess.run(cmd, shell=True)
+                                else:
+                                    cmd = f'sudo cp "{src}" "{os.path.join(system_swefiles_path, file)}"'
+                                    subprocess.run(cmd, shell=True)
+                        
+                        QMessageBox.information(parent_window, "Files Copied", 
+                                             "Swiss Ephemeris files have been copied to the system-wide location.\n"
+                                             "Please restart the application.")
+                    except Exception as copy_error:
+                        logging.error(f"Failed to copy files: {copy_error}")
+                        QMessageBox.critical(parent_window, "Copy Failed", 
+                                          f"Failed to copy Swiss Ephemeris files to the system-wide location.\n\n"
+                                          f"Error: {str(copy_error)}\n\n"
+                                          f"Please contact your system administrator for assistance.")
+            elif not app_files_exist:
+                # Files don't exist in app directory
+                QMessageBox.critical(parent_window, "Missing Swiss Ephemeris Files", 
+                                   f"The required Swiss Ephemeris files are missing from the application directory.\n\n"
+                                   f"Please ensure the application package is complete or contact support for assistance.")
+            else:
+                # Files exist in both places but there's still an error
+                QMessageBox.critical(parent_window, "Swiss Ephemeris Error", 
+                                   f"There was an error using the Swiss Ephemeris library despite the files being present.\n\n"
+                                   f"Error: {str(e)}\n\n"
+                                   f"Please contact your system administrator for assistance.")
+        
+        return False
+
 def exception_hook(exctype, value, traceback):
     """
     Global exception handler to show error messages in a dialog
@@ -135,6 +229,9 @@ def main():
         
         # Check for updates after a short delay to ensure UI is responsive
         QTimer.singleShot(2000, lambda: check_for_updates_on_startup(window))
+        
+        # Verify Swiss Ephemeris functionality in the background
+        QTimer.singleShot(3000, lambda: verify_swisseph_functionality(window))
         
         # Start the application event loop
         return app.exec_()

@@ -155,11 +155,191 @@ fi
 echo
 echo "Installing required packages..."
 python3 -m pip install --upgrade pip
+
+# Check for and uninstall existing flatlib and pyswisseph
+echo "Checking for existing flatlib and pyswisseph installations..."
+if python3 -m pip show flatlib &> /dev/null; then
+    echo "Removing existing flatlib installation..."
+    python3 -m pip uninstall -y flatlib
+    echo "Flatlib removed successfully."
+else
+    echo "Flatlib not found."
+fi
+
+if python3 -m pip show pyswisseph &> /dev/null; then
+    echo "Removing existing pyswisseph installation..."
+    python3 -m pip uninstall -y pyswisseph
+    echo "Pyswisseph removed successfully."
+else
+    echo "Pyswisseph not found."
+fi
+
+# Install pyswisseph from wheels directory based on architecture
+echo "Installing pyswisseph from wheels directory..."
+# Detect Python version
+PYTHON_VERSION=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
+echo "Detected Python version: $PYTHON_VERSION"
+
+# Map Python version to wheel version
+CP_VER=""
+if [ "$PYTHON_VERSION" == "3.9" ]; then CP_VER="cp39-cp39"; fi
+if [ "$PYTHON_VERSION" == "3.10" ]; then CP_VER="cp310-cp310"; fi
+if [ "$PYTHON_VERSION" == "3.11" ]; then CP_VER="cp311-cp311"; fi
+if [ "$PYTHON_VERSION" == "3.12" ]; then CP_VER="cp312-cp312"; fi
+if [ "$PYTHON_VERSION" == "3.13" ]; then CP_VER="cp313-cp313"; fi
+
+# Detect architecture
+if [[ $(uname -m) == "x86_64" ]]; then
+    ARCH="macosx_10_9_x86_64"
+elif [[ $(uname -m) == "arm64" ]]; then
+    ARCH="macosx_11_0_arm64"
+else
+    ARCH="macosx_10_9_x86_64"  # Default to x86_64 if unknown
+fi
+
+# Try to find architecture-appropriate wheel
+if [ -n "$CP_VER" ]; then
+    WHEEL_PATH="$INSTALL_DIR/wheels/$ARCH/pyswisseph-2.10.3.2-$CP_VER-$ARCH.whl"
+    if [ -f "$WHEEL_PATH" ]; then
+        echo "Found local wheel: $WHEEL_PATH"
+        python3 -m pip install "$WHEEL_PATH" --no-deps
+        if [ $? -eq 0 ]; then
+            echo "Successfully installed pyswisseph from local wheel."
+        else
+            echo "Failed to install from local wheel."
+            echo "Please check that the wheel file is not corrupted."
+            exit 1
+        fi
+    else
+        echo "No matching local wheel found for Python $PYTHON_VERSION on $ARCH"
+        echo "Expected wheel path: $WHEEL_PATH"
+        echo "Please ensure the appropriate wheel is available for your system."
+        exit 1
+    fi
+else
+    echo "Unsupported Python version: $PYTHON_VERSION"
+    echo "Please install a supported Python version (3.9-3.13)."
+    exit 1
+fi
+
+# Now install requirements
+echo "Installing required packages from requirements.txt..."
 python3 -m pip install -r requirements.txt
 
 if [ $? -ne 0 ]; then
     echo "Failed to install required packages."
     exit 1
+fi
+
+# Setup Swiss Ephemeris files
+echo
+echo "Setting up Swiss Ephemeris files..."
+SWEFILES_DIR="$INSTALL_DIR/flatlib/resources/swefiles"
+SYSTEM_SWEFILES_DIR="/usr/local/share/sweph/ephe"
+
+# Check if source directory exists
+if [ ! -d "$SWEFILES_DIR" ]; then
+    echo "Error: Swiss Ephemeris files directory not found at $SWEFILES_DIR"
+    echo "Please ensure the application is installed correctly."
+    exit 1
+fi
+
+# Required files
+REQUIRED_FILES=("seas_18.se1" "sepl_18.se1" "semo_18.se1" "fixstars.cat")
+
+# Check for required files
+echo "Checking for required ephemeris files..."
+MISSING_FILES=false
+
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ ! -f "$SWEFILES_DIR/$file" ]; then
+        echo "Missing: $file"
+        MISSING_FILES=true
+    else
+        echo "Found: $file"
+    fi
+done
+
+# Handle missing files
+if [ "$MISSING_FILES" = true ]; then
+    echo
+    echo "Some required Swiss Ephemeris files are missing from the source directory."
+    echo "Please ensure the application package is complete."
+    exit 1
+else
+    echo "All required ephemeris files are present in the application directory."
+fi
+
+# Check if system-wide Swiss Ephemeris directory exists
+echo
+echo "Checking for system-wide Swiss Ephemeris directory..."
+if [ ! -d "$SYSTEM_SWEFILES_DIR" ]; then
+    echo "System-wide Swiss Ephemeris directory not found."
+    echo "Would you like to create it and copy the ephemeris files? (Y/N)"
+    echo "This will require administrator privileges."
+    read -p "Your choice: " SYSTEM_CHOICE
+    
+    if [[ "$SYSTEM_CHOICE" =~ ^[Yy]$ ]]; then
+        # Create a temporary script for admin privileges
+        ADMIN_SCRIPT="/tmp/sweadmin.sh"
+        
+        echo "#!/bin/bash" > "$ADMIN_SCRIPT"
+        echo "echo Creating system-wide Swiss Ephemeris directory..." >> "$ADMIN_SCRIPT"
+        echo "mkdir -p \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
+        echo "echo Copying ephemeris files..." >> "$ADMIN_SCRIPT"
+        
+        for file in "${REQUIRED_FILES[@]}"; do
+            echo "if [ -f \"$SWEFILES_DIR/$file\" ]; then cp \"$SWEFILES_DIR/$file\" \"$SYSTEM_SWEFILES_DIR/$file\"; fi" >> "$ADMIN_SCRIPT"
+        done
+        
+        echo "echo" >> "$ADMIN_SCRIPT"
+        echo "echo System-wide Swiss Ephemeris files setup complete." >> "$ADMIN_SCRIPT"
+        echo "chmod -R 755 \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
+        
+        # Make the script executable
+        chmod +x "$ADMIN_SCRIPT"
+        
+        # Run with sudo
+        echo "Requesting administrator privileges..."
+        sudo "$ADMIN_SCRIPT"
+        
+        # Clean up
+        rm "$ADMIN_SCRIPT"
+    else
+        echo "Skipping system-wide Swiss Ephemeris setup."
+    fi
+else
+    echo "System-wide Swiss Ephemeris directory already exists."
+    echo "Would you like to update the ephemeris files? (Y/N)"
+    read -p "Your choice: " UPDATE_CHOICE
+    
+    if [[ "$UPDATE_CHOICE" =~ ^[Yy]$ ]]; then
+        # Create a temporary script for admin privileges
+        ADMIN_SCRIPT="/tmp/sweadmin.sh"
+        
+        echo "#!/bin/bash" > "$ADMIN_SCRIPT"
+        echo "echo Updating system-wide Swiss Ephemeris files..." >> "$ADMIN_SCRIPT"
+        
+        for file in "${REQUIRED_FILES[@]}"; do
+            echo "if [ -f \"$SWEFILES_DIR/$file\" ]; then cp \"$SWEFILES_DIR/$file\" \"$SYSTEM_SWEFILES_DIR/$file\"; fi" >> "$ADMIN_SCRIPT"
+        done
+        
+        echo "echo" >> "$ADMIN_SCRIPT"
+        echo "echo System-wide Swiss Ephemeris files update complete." >> "$ADMIN_SCRIPT"
+        echo "chmod -R 755 \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
+        
+        # Make the script executable
+        chmod +x "$ADMIN_SCRIPT"
+        
+        # Run with sudo
+        echo "Requesting administrator privileges..."
+        sudo "$ADMIN_SCRIPT"
+        
+        # Clean up
+        rm "$ADMIN_SCRIPT"
+    else
+        echo "Skipping system-wide Swiss Ephemeris update."
+    fi
 fi
 
 # Create desktop shortcut with icon
