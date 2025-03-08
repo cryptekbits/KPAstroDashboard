@@ -631,22 +631,58 @@ def main_build(args):
     # Set output name based on platform and architecture
     if is_windows:
         output_name = f"KPAstrologyDashboard-v{VERSION}-win-{target_arch}"
-        icon_file = "resources/favicon.ico" if not args.no_icon else None
+        # Check for icon file in both possible locations
+        if os.path.exists("resources/icons/app_icon.ico") and not args.no_icon:
+            icon_file = "resources/icons/app_icon.ico"
+        elif os.path.exists("resources/favicon.ico") and not args.no_icon:
+            icon_file = "resources/favicon.ico"
+            print("Using favicon.ico as app icon")
+        else:
+            icon_file = None
+            if not args.no_icon:
+                print("Warning: No icon file found. Building without an icon.")
     elif is_macos:
         output_name = f"KPAstrologyDashboard-v{VERSION}-mac-{target_arch}"
         # On macOS, we need .icns format or Pillow installed for conversion
         try:
             import PIL
-            icon_file = "resources/favicon.ico" if not args.no_icon else None
+            # Check for icon file in both possible locations
+            if os.path.exists("resources/icons/app_icon.ico") and not args.no_icon:
+                icon_file = "resources/icons/app_icon.ico"
+            elif os.path.exists("resources/favicon.ico") and not args.no_icon:
+                icon_file = "resources/favicon.ico"
+                print("Using favicon.ico as app icon")
+            else:
+                icon_file = None
+                if not args.no_icon:
+                    print("Warning: No icon file found. Building without an icon.")
             print("Pillow is installed. Icon will be automatically converted for macOS.")
         except ImportError:
             print("Pillow not installed. To use an icon on macOS, install Pillow with: pip install pillow")
             if not args.no_icon:
                 print("Attempting to build with icon anyway. If this fails, use --no-icon option.")
-            icon_file = "resources/favicon.ico" if not args.no_icon else None
+            # Check for icon file in both possible locations
+            if os.path.exists("resources/icons/app_icon.ico") and not args.no_icon:
+                icon_file = "resources/icons/app_icon.ico"
+            elif os.path.exists("resources/favicon.ico") and not args.no_icon:
+                icon_file = "resources/favicon.ico"
+                print("Using favicon.ico as app icon")
+            else:
+                icon_file = None
+                if not args.no_icon:
+                    print("Warning: No icon file found. Building without an icon.")
     else:  # Linux
         output_name = f"KPAstrologyDashboard-v{VERSION}-linux-{target_arch}"
-        icon_file = "resources/favicon.ico" if not args.no_icon else None
+        # Check for icon file in both possible locations
+        if os.path.exists("resources/icons/app_icon.ico") and not args.no_icon:
+            icon_file = "resources/icons/app_icon.ico"
+        elif os.path.exists("resources/favicon.ico") and not args.no_icon:
+            icon_file = "resources/favicon.ico"
+            print("Using favicon.ico as app icon")
+        else:
+            icon_file = None
+            if not args.no_icon:
+                print("Warning: No icon file found. Building without an icon.")
     
     # Disable backup/restore to prevent preserving old artifacts
     backup_dir = None

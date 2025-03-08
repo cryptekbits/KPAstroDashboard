@@ -54,9 +54,21 @@ def main():
         "--add-data=flatlib;flatlib",
         "--add-data=yogas;yogas",
         "--add-data=config.json;.",
-        "--icon=resources/icons/app_icon.ico",
-        "--hidden-import=PIL._tkinter_finder",
     ]
+    
+    # Check if the icon file exists, if not use the favicon.ico
+    icon_path = "resources/icons/app_icon.ico"
+    fallback_icon_path = "resources/favicon.ico"
+    
+    if os.path.exists(os.path.join(root_dir, icon_path)):
+        pyinstaller_args.append(f"--icon={icon_path}")
+    elif os.path.exists(os.path.join(root_dir, fallback_icon_path)):
+        print(f"Warning: {icon_path} not found, using {fallback_icon_path} instead")
+        pyinstaller_args.append(f"--icon={fallback_icon_path}")
+    else:
+        print(f"Warning: No icon files found at {icon_path} or {fallback_icon_path}")
+    
+    pyinstaller_args.append("--hidden-import=PIL._tkinter_finder")
     
     # Add debug flag if requested
     if args.debug:
