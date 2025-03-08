@@ -6,8 +6,8 @@ import os
 from datetime import datetime
 
 # Default version information
-VERSION = "2.0.1"
-VERSION_NAME = "AI 2.0.1-BigFix Release"
+VERSION = "2.1.0"
+VERSION_NAME = "AI 2.1.0"
 BUILD_DATE = "2025-03-09"
 
 # Check for environment variables that might override the version
