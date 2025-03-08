@@ -183,7 +183,33 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history and tags for generating release notes
       
+      # Download each artifact explicitly to ensure they're available
+      - name: Download source code artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: source-code
+          path: artifact-source-code
+      
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: artifact-windows-installer
+      
+      - name: Download macOS installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-installer
+          path: artifact-macos-installer
+      
+      - name: Download Windows PowerShell installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-ps
+          path: artifact-windows-installer-ps
+      
       - name: Download all workflow artifacts
+        id: download-all
         uses: actions/download-artifact@v4
         with:
           path: all-artifacts
@@ -192,8 +218,18 @@ jobs:
         run: |
           echo "Listing all downloaded artifacts:"
           find all-artifacts -type f | sort
+          echo "Listing explicitly downloaded artifacts:"
+          echo "Source code:"
+          find artifact-source-code -type f | sort
+          echo "Windows installer:"
+          find artifact-windows-installer -type f | sort
+          echo "macOS installer:"
+          find artifact-macos-installer -type f | sort
+          echo "Windows PS installer:"
+          find artifact-windows-installer-ps -type f | sort
           
       - name: Prepare artifacts for release
+        id: prepare-artifacts
         run: |
           mkdir -p release-artifacts
           
@@ -202,16 +238,45 @@ jobs:
           
           # Source code ZIP
           echo "Preparing source code ZIP..."
-          find all-artifacts/source-code -name "*.zip" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}.zip \; || echo "No source code ZIP found"
+          if [ -f "artifact-source-code/KPAstrologyDashboard-${VERSION}.zip" ]; then
+            cp artifact-source-code/KPAstrologyDashboard-${VERSION}.zip release-artifacts/
+            echo "Source code ZIP copied successfully"
+          else
+            echo "WARNING: Source code ZIP not found in explicit artifact"
+            # Try the combined artifacts directory as fallback
+            find all-artifacts -name "*.zip" | grep -v "Windows.zip" | head -1 | xargs -I{} cp {} release-artifacts/KPAstrologyDashboard-${VERSION}.zip || echo "No source code ZIP found in all-artifacts"
+          fi
           
           # Installer scripts
           echo "Preparing installer scripts..."
-          find all-artifacts/windows-installer -name "*.bat" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.bat \; || echo "No Windows installer found"
-          find all-artifacts/macos-installer -name "*.sh" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-macOS-Installer.sh \; || echo "No macOS installer found"
-          chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
+          # Windows installer (batch)
+          if [ -f "artifact-windows-installer/install_windows.bat" ]; then
+            cp artifact-windows-installer/install_windows.bat release-artifacts/KPAstrologyDashboard-Windows-Installer.bat
+            echo "Windows installer copied successfully"
+          else 
+            find all-artifacts -name "*.bat" | head -1 | xargs -I{} cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.bat || echo "No Windows batch installer found"
+          fi
+
+          # macOS installer (sh)
+          if [ -f "artifact-macos-installer/install_macos.sh" ]; then
+            cp artifact-macos-installer/install_macos.sh release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
+            chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
+            echo "macOS installer copied successfully"
+          else
+            find all-artifacts -name "*.sh" | head -1 | xargs -I{} cp {} release-artifacts/KPAstrologyDashboard-macOS-Installer.sh || echo "No macOS installer found"
+            if [ -f "release-artifacts/KPAstrologyDashboard-macOS-Installer.sh" ]; then
+              chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
+            fi
+          fi
+
           # Prepare Windows PowerShell installer
           echo "Preparing Windows PowerShell installer..."
-          find all-artifacts/windows-installer-ps -name "*.ps1" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.ps1 \; || echo "No Windows PowerShell installer found"
+          if [ -f "artifact-windows-installer-ps/install_windows.ps1" ]; then
+            cp artifact-windows-installer-ps/install_windows.ps1 release-artifacts/KPAstrologyDashboard-Windows-Installer.ps1
+            echo "Windows PowerShell installer copied successfully"
+          else
+            find all-artifacts -name "*.ps1" | head -1 | xargs -I{} cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.ps1 || echo "No Windows PowerShell installer found"
+          fi
           
           # Windows executable
           echo "Skipping Windows executable and ZIP artifact copy as Windows build has been removed."
@@ -229,16 +294,53 @@ jobs:
           # List what we've collected
           echo "Contents of release-artifacts directory:"
           ls -la release-artifacts/
+          # Set outputs for the next step
+          echo "release_dir=$(pwd)/release-artifacts" >> $GITHUB_OUTPUT
+          echo "num_artifacts=$(find release-artifacts -type f | wc -l)" >> $GITHUB_OUTPUT
+       
+      - name: Verify artifacts before release
+        run: |
+          echo "Verifying release artifacts..."
+          FILES_COUNT=$(find release-artifacts -type f | wc -l)
+          echo "Found $FILES_COUNT files to include in release"
           
+          if [ $FILES_COUNT -lt 4 ]; then
+            echo "WARNING: Expected at least 4 release artifacts but found only $FILES_COUNT"
+            echo "This may indicate a problem with artifact preparation"
+          fi
+          
+          for file in release-artifacts/*; do
+            echo "Checking $file ($(stat -c %s "$file") bytes)"
+            if [ ! -s "$file" ]; then
+              echo "WARNING: $file is empty!"
+            fi
+          done
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
+        id: create-release
         with:
-          name: KP Astrology Dashboard ${{ needs.check-conditions.outputs.version }}
+          name: 'KP Astrology Dashboard ${{ needs.check-conditions.outputs.version }}'
           tag_name: ${{ needs.check-conditions.outputs.tag_name }}
           draft: ${{ needs.check-conditions.outputs.has_tag != 'true' }}
           prerelease: false
           generate_release_notes: true  # Automatically generate notes based on commits
+          make_latest: true
+          fail_on_unmatched_files: true
           files: |
             release-artifacts/*
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Verify release creation
+        if: steps.create-release.outcome == 'success'
+        run: |
+          echo "Release created successfully!"
+          echo "Release URL: ${{ steps.create-release.outputs.url }}"
+      
+      - name: Handle release creation failure
+        if: steps.create-release.outcome != 'success'
+        run: |
+          echo "Failed to create release!"
+          echo "This might be due to issues with the artifact files or GitHub permissions."
+          exit 1 

@@ -400,14 +400,41 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         
         # Windows installer
         windows_installers = list(artifacts_dir.glob("**/windows-installer/*.bat"))
+        if not windows_installers:
+            # Try a more flexible search pattern
+            windows_installers = list(artifacts_dir.glob("**/*.bat"))
+            print(f"Using flexible search pattern for Windows installer, found {len(windows_installers)} files")
+        
         if windows_installers:
             win_installer = windows_installers[0]
             target_path = release_dir / "KPAstrologyDashboard-Windows-Installer.bat"
             shutil.copy(win_installer, target_path)
             print(f"Prepared Windows installer: {target_path}")
+        else:
+            print("WARNING: No Windows installer (.bat) found!")
+        
+        # Windows PowerShell installer
+        powershell_installers = list(artifacts_dir.glob("**/windows-installer-ps/*.ps1"))
+        if not powershell_installers:
+            # Try a more flexible search pattern
+            powershell_installers = list(artifacts_dir.glob("**/*.ps1"))
+            print(f"Using flexible search pattern for Windows PowerShell installer, found {len(powershell_installers)} files")
+            
+        if powershell_installers:
+            ps_installer = powershell_installers[0]
+            target_path = release_dir / "KPAstrologyDashboard-Windows-Installer.ps1"
+            shutil.copy(ps_installer, target_path)
+            print(f"Prepared Windows PowerShell installer: {target_path}")
+        else:
+            print("WARNING: No Windows PowerShell installer (.ps1) found!")
         
         # macOS installer
         macos_installers = list(artifacts_dir.glob("**/macos-installer/*.sh"))
+        if not macos_installers:
+            # Try a more flexible search pattern
+            macos_installers = list(artifacts_dir.glob("**/*.sh"))
+            print(f"Using flexible search pattern for macOS installer, found {len(macos_installers)} files")
+        
         if macos_installers:
             mac_installer = macos_installers[0]
             target_path = release_dir / "KPAstrologyDashboard-macOS-Installer.sh"
@@ -419,6 +446,35 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             shutil.copy(mac_installer, command_path)
             chmod_plus_x(command_path)
             print(f"Prepared macOS installers: {target_path} and {command_path}")
+        else:
+            print("WARNING: No macOS installer (.sh) found!")
+            
+        # Verify all the expected files are present
+        expected_files = [
+            f"KPAstrologyDashboard-{version}.zip",
+            "KPAstrologyDashboard-Windows-Installer.bat",
+            "KPAstrologyDashboard-Windows-Installer.ps1",
+            "KPAstrologyDashboard-macOS-Installer.sh",
+            "KPAstrologyDashboard-macOS-Installer.command"
+        ]
+        
+        print("\nVerifying release artifacts:")
+        missing_files = []
+        for file_name in expected_files:
+            file_path = release_dir / file_name
+            if file_path.exists():
+                file_size = file_path.stat().st_size
+                print(f"✓ {file_name} ({file_size} bytes)")
+                if file_size == 0:
+                    print(f"  WARNING: {file_name} is empty!")
+            else:
+                print(f"✗ {file_name} is missing!")
+                missing_files.append(file_name)
+        
+        if missing_files:
+            print(f"\nWARNING: {len(missing_files)} expected files are missing from the release!")
+            print("Missing files: " + ", ".join(missing_files))
+            print("This might cause the GitHub release to have incomplete artifacts.")
             
         # Windows executable build is disabled; skipping copying Windows artifacts.
         print("Skipping Windows executable and ZIP artifact copy as Windows build has been removed.")
@@ -431,74 +487,130 @@ def download_workflow_artifacts(version, repo_info, root_dir):
 
 def create_github_release(version):
     """Create a GitHub release with the artifacts"""
-    root_dir = Path(__file__).parent.parent
-    tag_name = f"v{version}"
-    release_dir = root_dir / "release"
     
     try:
-        repo_info = get_repo_info()
-        
-        # Check if the release already exists
-        result = subprocess.run(
-            ["gh", "release", "view", tag_name, "--repo", repo_info, "--json", "name"],
-            cwd=root_dir,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        
-        release_exists = result.returncode == 0
-        
-        if release_exists:
-            print(f"Release {tag_name} already exists. Updating it...")
-            
-            # Delete the existing release (but keep the tag)
-            subprocess.run(
-                ["gh", "release", "delete", tag_name, "--repo", repo_info, "--yes"],
-                cwd=root_dir,
-                check=False
-            )
-        
-        # Generate release notes
-        release_notes = get_release_notes()
-        release_notes_file = root_dir / "release_notes.md"
-        with open(release_notes_file, "w") as f:
-            f.write(release_notes)
-        
-        # Create the release
-        create_args = [
-            "gh", "release", "create", tag_name,
-            "--repo", repo_info,
-            "--title", f"KP Astrology Dashboard {version}",
-            "--notes-file", str(release_notes_file)
-        ]
-        
-        # Add files to the release
-        if release_dir.exists():
-            for file in release_dir.glob("*"):
-                create_args.append(str(file))
-        
-        result = subprocess.run(
-            create_args,
-            cwd=root_dir,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        
-        if result.returncode != 0:
-            print(f"Error creating release: {result.stderr}")
+        release_dir = Path.cwd() / "release"
+        if not release_dir.exists():
+            print("Release directory not found. Run download_workflow_artifacts first.")
             return False
         
-        print(f"Successfully created release {tag_name}")
+        repo_info = get_repo_info()
+        if not repo_info:
+            return False
         
-        # Clean up
-        if release_notes_file.exists():
-            release_notes_file.unlink()
+        owner = repo_info["owner"]
+        repo = repo_info["repo"]
         
+        # Get GitHub token
+        gh_token = os.environ.get("GITHUB_TOKEN")
+        if not gh_token:
+            print("GitHub token not found. Set the GITHUB_TOKEN environment variable.")
+            return False
+        
+        print(f"Step 3: Creating GitHub release with artifacts...")
+        
+        # Check if release already exists
+        release_tag = f"v{version}"
+        headers = {
+            "Authorization": f"token {gh_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        # Get release by tag
+        release_url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{release_tag}"
+        response = requests.get(release_url, headers=headers)
+        
+        release_id = None
+        if response.status_code == 200:
+            existing_release = response.json()
+            release_id = existing_release["id"]
+            print(f"Release {release_tag} already exists. Updating it...")
+            
+            print(f"Updating assets for release {release_tag} (ID: {release_id})...")
+            
+            # Delete existing assets
+            assets = existing_release.get("assets", [])
+            for asset in assets:
+                asset_id = asset["id"]
+                asset_name = asset["name"]
+                print(f"Deleting asset: {asset_name}")
+                delete_url = f"https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset_id}"
+                delete_response = requests.delete(delete_url, headers=headers)
+                if delete_response.status_code == 204:
+                    print(f"✓ Deleted asset: {asset_name}")
+                else:
+                    print(f"⚠ Failed to delete asset {asset_name}: {delete_response.status_code}")
+            
+            # Wait briefly to ensure GitHub API has processed the asset deletions
+            time.sleep(1)
+        
+        # Create a new release if it doesn't exist
+        if release_id is None:
+            create_data = {
+                "tag_name": release_tag,
+                "name": f"KP Astrology Dashboard {version}",
+                "body": get_release_notes(),
+                "draft": False,
+                "prerelease": False
+            }
+            
+            create_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
+            response = requests.post(create_url, headers=headers, json=create_data)
+            
+            if response.status_code != 201:
+                print(f"Failed to create release: {response.status_code} - {response.text}")
+                return False
+            
+            release = response.json()
+            release_id = release["id"]
+            print(f"✓ Created release: {release['name']}")
+        
+        # Ensure we have a valid upload URL with the correct release ID
+        upload_url = f"https://uploads.github.com/repos/{owner}/{repo}/releases/{release_id}/assets"
+        
+        # Upload assets to release
+        artifacts = list(release_dir.glob("*"))
+        
+        for artifact in artifacts:
+            if artifact.is_file():
+                artifact_name = artifact.name
+                
+                # Check if file exists and is not empty
+                if artifact.stat().st_size == 0:
+                    print(f"⚠ Skipping empty file: {artifact_name}")
+                    continue
+                
+                # Set proper content type based on file extension
+                content_type = "application/octet-stream"
+                if artifact.suffix == ".zip":
+                    content_type = "application/zip"
+                elif artifact.suffix == ".exe":
+                    content_type = "application/vnd.microsoft.portable-executable"
+                elif artifact.suffix in [".bat", ".sh", ".command", ".ps1"]:
+                    content_type = "text/plain"
+                
+                # Upload asset
+                asset_url = f"{upload_url}?name={artifact_name}"
+                upload_headers = headers.copy()
+                upload_headers["Content-Type"] = content_type
+                
+                with open(artifact, "rb") as f:
+                    response = requests.post(
+                        asset_url,
+                        headers=upload_headers,
+                        data=f
+                    )
+                
+                if response.status_code == 201:
+                    print(f"✓ Uploaded {artifact_name}")
+                else:
+                    print(f"Failed to upload {artifact_name}: {response.status_code} - {response.text}")
+        
+        print(f"✓ Release {release_tag} is ready: https://github.com/{owner}/{repo}/releases/tag/{release_tag}")
         return True
+    
     except Exception as e:
-        print(f"Error creating release: {e}")
+        print(f"Error creating GitHub release: {e}")
         return False
 
 
