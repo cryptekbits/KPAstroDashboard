@@ -143,6 +143,11 @@ jobs:
         # Make macOS script executable
         chmod +x install_macos.sh
     
+    - name: Update Windows PowerShell script with correct version
+      run: |
+        VERSION="${{ needs.check-conditions.outputs.version }}"
+        sed -i "s/##VERSION##/$VERSION/g" install_windows.ps1
+    
     - name: Upload Windows installer
       uses: actions/upload-artifact@v4
       with:
@@ -156,11 +161,18 @@ jobs:
         name: macos-installer
         path: install_macos.sh
         retention-days: 7
+    
+    - name: Upload Windows PowerShell installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer-ps
+        path: install_windows.ps1
+        retention-days: 7
 
   # This job creates a GitHub release with all artifacts when a tag is pushed
   create-release:
     name: Create Release
-    needs: [check-conditions, create-source-code-zip, prepare-installers]
+    needs: [check-conditions, prepare-installers]
     # Run this job if a tag is present or on manual trigger, but not for develop branch
     if: (needs.check-conditions.outputs.has_tag == 'true' || github.event_name == 'workflow_dispatch') && needs.check-conditions.outputs.is_develop != 'true'
     runs-on: ubuntu-latest
@@ -197,24 +209,12 @@ jobs:
           find all-artifacts/windows-installer -name "*.bat" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.bat \; || echo "No Windows installer found"
           find all-artifacts/macos-installer -name "*.sh" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-macOS-Installer.sh \; || echo "No macOS installer found"
           chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
+          # Prepare Windows PowerShell installer
+          echo "Preparing Windows PowerShell installer..."
+          find all-artifacts/windows-installer-ps -name "*.ps1" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.ps1 \; || echo "No Windows PowerShell installer found"
           
           # Windows executable
-          echo "Preparing Windows executable..."
-          find all-artifacts/windows-executable -name "*.exe" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}.exe \; || echo "No Windows executable found"
-          find all-artifacts/windows-executable-zip -name "*.zip" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}-Windows.zip \; || echo "No Windows executable ZIP found"
-          
-          # Add more detailed error checking for Windows executable
-          if [ ! -f "release-artifacts/KPAstrologyDashboard-${VERSION}.exe" ]; then
-            echo "ERROR: Windows executable not found in artifacts!"
-            echo "Searching for any .exe files in all-artifacts:"
-            find all-artifacts -name "*.exe" -type f
-          fi
-          
-          if [ ! -f "release-artifacts/KPAstrologyDashboard-${VERSION}-Windows.zip" ]; then
-            echo "ERROR: Windows executable ZIP not found in artifacts!"
-            echo "Searching for any .zip files in all-artifacts:"
-            find all-artifacts -name "*.zip" -type f
-          fi
+          echo "Skipping Windows executable and ZIP artifact copy as Windows build has been removed."
           
           # Create a macOS .command file (which is double-clickable)
           echo "Creating double-clickable macOS installer..."
