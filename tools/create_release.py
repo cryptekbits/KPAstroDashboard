@@ -713,8 +713,20 @@ def main():
             print("\nStep 2: Waiting for GitHub Actions workflow to complete...")
             wait_for_workflow_completion(args.version, args.timeout)
         
+        # Download artifacts from GitHub Actions workflow
+        print("\nStep 3: Downloading artifacts from GitHub Actions workflow...")
+        repo_info = get_repo_info()
+        if repo_info:
+            artifacts_success = download_workflow_artifacts(args.version, f"{repo_info['owner']}/{repo_info['repo']}", Path.cwd())
+            if not artifacts_success:
+                print("Warning: There were issues downloading artifacts.")
+                proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+                if proceed.lower() != 'y':
+                    print("Aborting release process.")
+                    return
+        
         # Create GitHub release
-        print("\nStep 3: Creating GitHub release with artifacts...")
+        print("\nStep 4: Creating GitHub release with artifacts...")
         release_success = create_github_release(args.version)
         
         if release_success:
