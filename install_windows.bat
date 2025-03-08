@@ -65,8 +65,8 @@ if exist "%LOCAL_ZIP_FILE%" (
     echo Downloading KP Astrology Dashboard v%VERSION%...
     echo URL: %DOWNLOAD_URL%
     
-    :: PowerShell script for download with progress
-    powershell -Command "& {$ProgressPreference = 'Continue'; $wc = New-Object System.Net.WebClient; $wc.Headers.Add('User-Agent', 'KPAstroDashboard Installer'); $dest = '%LOCAL_ZIP_FILE%'; $start = Get-Date; $totalSize = 0; $wc.DownloadFileAsync('%DOWNLOAD_URL%', $dest); $prevPercent = 0; Register-ObjectEvent -InputObject $wc -EventName DownloadProgressChanged -Action { $percent = $EventArgs.ProgressPercentage; if ($percent -ge $prevPercent + 5) { $currBytes = $EventArgs.BytesReceived; $totalBytes = $EventArgs.TotalBytesToReceive; $totalSize = $totalBytes; $elapsed = ((Get-Date) - $start).TotalSeconds; $speed = $currBytes / $elapsed / 1MB; $remaining = ($totalBytes - $currBytes) / ($speed * 1MB); Write-Host ('{0:N0}% complete - {1:N2} MB of {2:N2} MB - {3:N2} MB/s - ETA: {4:N0} sec' -f $percent, ($currBytes/1MB), ($totalBytes/1MB), $speed, $remaining) -ForegroundColor Cyan; $script:prevPercent = $percent; } }; Register-ObjectEvent -InputObject $wc -EventName DownloadFileCompleted -Action { Write-Host 'Download completed!' -ForegroundColor Green }; while ($wc.IsBusy) { Start-Sleep -Milliseconds 100 }; if (Test-Path $dest) { Write-Host ('Downloaded {0:N2} MB in {1:N2} seconds.' -f ($totalSize/1MB), ((Get-Date) - $start).TotalSeconds) -ForegroundColor Green; } else { Write-Host 'Download failed!' -ForegroundColor Red; exit 1 }}"
+    :: Fixed PowerShell script for download with progress
+    powershell -Command "& { $ProgressPreference = 'Continue'; $wc = New-Object System.Net.WebClient; $wc.Headers.Add('User-Agent', 'KPAstroDashboard Installer'); $dest = '%LOCAL_ZIP_FILE%'; $start = Get-Date; $totalSize = 0; $wc.DownloadFile('%DOWNLOAD_URL%', $dest); if (Test-Path $dest) { $fileInfo = Get-Item $dest; Write-Host ('Downloaded {0:N2} MB in {1:N2} seconds.' -f ($fileInfo.Length/1MB), ((Get-Date) - $start).TotalSeconds) -ForegroundColor Green; } else { Write-Host 'Download failed!' -ForegroundColor Red; exit 1 } }"
 
     if %ERRORLEVEL% NEQ 0 (
         echo Failed to download the application package.
@@ -76,6 +76,23 @@ if exist "%LOCAL_ZIP_FILE%" (
     )
     
     echo Download saved to: %LOCAL_ZIP_FILE%
+)
+
+:: Verify the downloaded file exists and has content
+if not exist "%LOCAL_ZIP_FILE%" (
+    echo ERROR: Download file not found: %LOCAL_ZIP_FILE%
+    echo Please check your internet connection and try again.
+    pause
+    exit /b 1
+)
+
+:: Get file size to verify download
+for %%I in ("%LOCAL_ZIP_FILE%") do set FILE_SIZE=%%~zI
+if %FILE_SIZE% EQU 0 (
+    echo ERROR: Downloaded file is empty. Download may have failed.
+    echo Please delete %LOCAL_ZIP_FILE% and run this installer again.
+    pause
+    exit /b 1
 )
 
 :: Check if files were already extracted to the destination
@@ -98,8 +115,8 @@ if exist "%TEMP_EXTRACT_DIR%" (
     rmdir /S /Q "%TEMP_EXTRACT_DIR%"
 )
 
-:: Extract using PowerShell with progress indicator
-powershell -Command "& {$ProgressPreference = 'Continue'; Write-Host 'Extracting archive...' -ForegroundColor Cyan; Expand-Archive -Path '%LOCAL_ZIP_FILE%' -DestinationPath '%TEMP_EXTRACT_DIR%' -Force}"
+:: Extract using PowerShell with simplified error handling
+powershell -Command "& { $ErrorActionPreference = 'Stop'; try { Write-Host 'Extracting archive...' -ForegroundColor Cyan; Expand-Archive -Path '%LOCAL_ZIP_FILE%' -DestinationPath '%TEMP_EXTRACT_DIR%' -Force; Write-Host 'Extraction successful.' -ForegroundColor Green; } catch { Write-Host ('Extraction error: ' + $_.Exception.Message) -ForegroundColor Red; exit 1; } }"
 
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to extract the application package.
@@ -114,6 +131,23 @@ echo Moving files to installation directory...
 for /d %%G in ("%TEMP_EXTRACT_DIR%\*") do (
     echo Copying from: %%G
     xcopy "%%G\*" "%INSTALL_DIR%" /E /I /Y
+)
+
+:: Check if requirements.txt exists, create it if not
+if not exist "%INSTALL_DIR%\requirements.txt" (
+    echo Creating requirements.txt file...
+    (
+        echo streamlit==1.38.0
+        echo pandas==2.1.4
+        echo numpy==1.26.4
+        echo python-dateutil==2.8.2
+        echo matplotlib==3.8.2
+        echo pytz==2024.1
+        echo pyephem==4.1.5
+        echo scipy==1.12.0
+        echo pyswisseph==2.10.3.2
+    ) > "%INSTALL_DIR%\requirements.txt"
+    echo Created requirements.txt file.
 )
 
 :: Clean up temp extraction directory
@@ -212,7 +246,7 @@ if "!INSTALL_PYTHON!"=="true" (
         set PYTHON_DOWNLOAD_URL=https://www.python.org/ftp/python/%REQUIRED_PYTHON_VERSION%/python-%REQUIRED_PYTHON_VERSION%-%ARCH%.exe
         echo Download URL: !PYTHON_DOWNLOAD_URL!
         
-        powershell -Command "& {$ProgressPreference = 'Continue'; $wc = New-Object System.Net.WebClient; $dest = '!PYTHON_INSTALLER_PATH!'; $start = Get-Date; $wc.DownloadFileAsync('!PYTHON_DOWNLOAD_URL!', $dest); Register-ObjectEvent -InputObject $wc -EventName DownloadProgressChanged -Action { $percent = $EventArgs.ProgressPercentage; $currBytes = $EventArgs.BytesReceived; $totalBytes = $EventArgs.TotalBytesToReceive; $elapsed = ((Get-Date) - $start).TotalSeconds; $speed = if ($elapsed -gt 0) { $currBytes / $elapsed / 1MB } else { 0 }; $remaining = if ($speed -gt 0) { ($totalBytes - $currBytes) / ($speed * 1MB) } else { 0 }; Write-Host ('{0:N0}% complete - {1:N2} MB of {2:N2} MB - {3:N2} MB/s - ETA: {4:N0} sec' -f $percent, ($currBytes/1MB), ($totalBytes/1MB), $speed, $remaining) -ForegroundColor Cyan }; Register-ObjectEvent -InputObject $wc -EventName DownloadFileCompleted -Action { Write-Host 'Download completed!' -ForegroundColor Green }; while ($wc.IsBusy) { Start-Sleep -Milliseconds 100 } }"
+        powershell -Command "& { $ProgressPreference = 'Continue'; $wc = New-Object System.Net.WebClient; $dest = '!PYTHON_INSTALLER_PATH!'; $start = Get-Date; $wc.DownloadFile('!PYTHON_DOWNLOAD_URL!', $dest); if (Test-Path $dest) { $fileInfo = Get-Item $dest; Write-Host ('Downloaded {0:N2} MB in {1:N2} seconds.' -f ($fileInfo.Length/1MB), ((Get-Date) - $start).TotalSeconds) -ForegroundColor Green; } else { Write-Host 'Download failed!' -ForegroundColor Red; exit 1 } }"
     )
     
     :: Open the folder containing the Python installer

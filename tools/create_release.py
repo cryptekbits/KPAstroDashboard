@@ -413,39 +413,25 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         else:
             print("WARNING: No Windows installer (.bat) found!")
         
-        # Windows PowerShell installer
-        powershell_installers = list(artifacts_dir.glob("**/windows-installer-ps/*.ps1"))
-        if not powershell_installers:
-            # Try a more flexible search pattern
-            powershell_installers = list(artifacts_dir.glob("**/*.ps1"))
-            print(f"Using flexible search pattern for Windows PowerShell installer, found {len(powershell_installers)} files")
-            
-        if powershell_installers:
-            ps_installer = powershell_installers[0]
-            target_path = release_dir / "KPAstrologyDashboard-Windows-Installer.ps1"
-            shutil.copy(ps_installer, target_path)
-            print(f"Prepared Windows PowerShell installer: {target_path}")
-        else:
-            print("WARNING: No Windows PowerShell installer (.ps1) found!")
-        
-        # macOS installer
+        # macOS installer (sh)
         macos_installers = list(artifacts_dir.glob("**/macos-installer/*.sh"))
         if not macos_installers:
             # Try a more flexible search pattern
             macos_installers = list(artifacts_dir.glob("**/*.sh"))
             print(f"Using flexible search pattern for macOS installer, found {len(macos_installers)} files")
-        
-        if macos_installers:
-            mac_installer = macos_installers[0]
-            target_path = release_dir / "KPAstrologyDashboard-macOS-Installer.sh"
-            shutil.copy(mac_installer, target_path)
-            chmod_plus_x(target_path)
             
-            # Also create a .command file (double-clickable on macOS)
+        if macos_installers:
+            macos_installer = macos_installers[0]
+            target_path = release_dir / "KPAstrologyDashboard-macOS-Installer.sh"
+            shutil.copy(macos_installer, target_path)
+            chmod_plus_x(target_path)
+            print(f"Prepared macOS installer: {target_path}")
+            
+            # Also create a .command file (which is double-clickable on macOS)
             command_path = release_dir / "KPAstrologyDashboard-macOS-Installer.command"
-            shutil.copy(mac_installer, command_path)
+            shutil.copy(macos_installer, command_path)
             chmod_plus_x(command_path)
-            print(f"Prepared macOS installers: {target_path} and {command_path}")
+            print(f"Prepared macOS command: {command_path}")
         else:
             print("WARNING: No macOS installer (.sh) found!")
             
@@ -453,7 +439,6 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         expected_files = [
             f"KPAstrologyDashboard-{version}.zip",
             "KPAstrologyDashboard-Windows-Installer.bat",
-            "KPAstrologyDashboard-Windows-Installer.ps1",
             "KPAstrologyDashboard-macOS-Installer.sh",
             "KPAstrologyDashboard-macOS-Installer.command"
         ]
@@ -586,7 +571,7 @@ def create_github_release(version):
                     content_type = "application/zip"
                 elif artifact.suffix == ".exe":
                     content_type = "application/vnd.microsoft.portable-executable"
-                elif artifact.suffix in [".bat", ".sh", ".command", ".ps1"]:
+                elif artifact.suffix in [".bat", ".sh", ".command"]:
                     content_type = "text/plain"
                 
                 # Upload asset

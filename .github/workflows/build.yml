@@ -143,11 +143,6 @@ jobs:
         # Make macOS script executable
         chmod +x install_macos.sh
     
-    - name: Update Windows PowerShell script with correct version
-      run: |
-        VERSION="${{ needs.check-conditions.outputs.version }}"
-        sed -i "s/##VERSION##/$VERSION/g" install_windows.ps1
-    
     - name: Upload Windows installer
       uses: actions/upload-artifact@v4
       with:
@@ -160,13 +155,6 @@ jobs:
       with:
         name: macos-installer
         path: install_macos.sh
-        retention-days: 7
-    
-    - name: Upload Windows PowerShell installer
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-installer-ps
-        path: install_windows.ps1
         retention-days: 7
 
   # This job creates a GitHub release with all artifacts when a tag is pushed
@@ -202,12 +190,6 @@ jobs:
           name: macos-installer
           path: artifact-macos-installer
       
-      - name: Download Windows PowerShell installer artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installer-ps
-          path: artifact-windows-installer-ps
-      
       - name: Download all workflow artifacts
         id: download-all
         uses: actions/download-artifact@v4
@@ -225,8 +207,6 @@ jobs:
           find artifact-windows-installer -type f | sort
           echo "macOS installer:"
           find artifact-macos-installer -type f | sort
-          echo "Windows PS installer:"
-          find artifact-windows-installer-ps -type f | sort
           
       - name: Prepare artifacts for release
         id: prepare-artifacts
@@ -267,15 +247,6 @@ jobs:
             if [ -f "release-artifacts/KPAstrologyDashboard-macOS-Installer.sh" ]; then
               chmod +x release-artifacts/KPAstrologyDashboard-macOS-Installer.sh
             fi
-          fi
-
-          # Prepare Windows PowerShell installer
-          echo "Preparing Windows PowerShell installer..."
-          if [ -f "artifact-windows-installer-ps/install_windows.ps1" ]; then
-            cp artifact-windows-installer-ps/install_windows.ps1 release-artifacts/KPAstrologyDashboard-Windows-Installer.ps1
-            echo "Windows PowerShell installer copied successfully"
-          else
-            find all-artifacts -name "*.ps1" | head -1 | xargs -I{} cp {} release-artifacts/KPAstrologyDashboard-Windows-Installer.ps1 || echo "No Windows PowerShell installer found"
           fi
           
           # Windows executable
