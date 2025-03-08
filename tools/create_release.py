@@ -717,7 +717,7 @@ def main():
         print("\nStep 3: Downloading artifacts from GitHub Actions workflow...")
         repo_info = get_repo_info()
         if repo_info:
-            artifacts_success = download_workflow_artifacts(args.version, f"{repo_info['owner']}/{repo_info['repo']}", Path.cwd())
+            artifacts_success = download_workflow_artifacts(args.version, repo_info, Path.cwd())
             if not artifacts_success:
                 print("Warning: There were issues downloading artifacts.")
                 proceed = input("Do you want to continue with the release process anyway? (y/n): ")

@@ -310,22 +310,25 @@ class KPAstrologyApp(QMainWindow):
                 export_location = export_settings['location']
                 # Normalize the path to ensure it works on the current OS
                 export_location = os.path.normpath(export_location)
-                # Check if the directory exists and is actually a directory
-                if os.path.exists(export_location):
-                    if not os.path.isdir(export_location):
-                        # If it exists but is not a directory, use the user's home directory instead
-                        logging.warning(f"Export location {export_location} exists but is not a directory. Using home directory instead.")
-                        export_location = os.path.expanduser("~")
-                else:
-                    # Try to create the directory if it doesn't exist
+                
+                # Check if it's an existing directory or needs to be created
+                if not os.path.exists(export_location):
                     try:
                         os.makedirs(export_location, exist_ok=True)
+                        logging.info(f"Created export directory: {export_location}")
                     except Exception as e:
                         logging.warning(f"Failed to create export directory {export_location}: {str(e)}. Using home directory instead.")
                         export_location = os.path.expanduser("~")
+                elif not os.path.isdir(export_location):
+                    logging.warning(f"Export location {export_location} exists but is not a directory. Using home directory instead.")
+                    export_location = os.path.expanduser("~")
             
-            # Combine path and filename
-            filepath = os.path.join(export_location, filename) if export_location else filename
+            # Combine path and filename with proper path handling for the OS
+            if export_location:
+                # Ensure we're using the right path separator for the current OS
+                filepath = os.path.join(export_location, filename)
+            else:
+                filepath = filename
             
             logging.info(f"Exporting data to {filepath}")
             self.main_tab.status_label.setText("Exporting to Excel...")
@@ -342,7 +345,7 @@ class KPAstrologyApp(QMainWindow):
                                     f"Data has been exported to {filepath}")
 
             # Check if auto-open is enabled in settings
-            auto_open = True  # Default to true
+            auto_open = True
             if 'auto_open' in export_settings:
                 auto_open = export_settings['auto_open']
             
