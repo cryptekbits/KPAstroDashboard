@@ -15,74 +15,70 @@ set INSTALL_DIR=%INSTALL_DIR:~0,-1%
 echo Installation directory: %INSTALL_DIR%
 echo.
 
-:: Check for and uninstall existing flatlib and pyswisseph
-echo Checking for existing flatlib and pyswisseph installations...
-python -m pip show flatlib >nul 2>&1
+:: Detect Python command
+set "PYTHON_CMD=python"
+python --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    :: Try python3 command
+    python3 --version >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        set "PYTHON_CMD=python3"
+    ) else (
+        :: Try py command
+        py --version >nul 2>&1
+        if %ERRORLEVEL% EQU 0 (
+            set "PYTHON_CMD=py"
+        ) else (
+            echo Python not found. Please install Python and make sure it's in your PATH.
+            echo You can download Python from https://www.python.org/downloads/
+            pause
+            exit /b 1
+        )
+    )
+)
+
+:: Display detected Python version
+for /f "tokens=*" %%V in ('!PYTHON_CMD! --version 2^>^&1') do set PYTHON_VERSION_OUTPUT=%%V
+echo Using: !PYTHON_VERSION_OUTPUT!
+echo.
+
+:: Check for and uninstall existing flatlib
+echo Checking for existing flatlib installation...
+!PYTHON_CMD! -m pip show flatlib >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo Removing existing flatlib installation...
-    python -m pip uninstall -y flatlib
+    !PYTHON_CMD! -m pip uninstall -y flatlib
     echo Flatlib removed successfully.
 ) else (
     echo Flatlib not found.
 )
 
-python -m pip show pyswisseph >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo Removing existing pyswisseph installation...
-    python -m pip uninstall -y pyswisseph
-    echo Pyswisseph removed successfully.
-) else (
-    echo Pyswisseph not found.
-)
-
 echo Step 1: Installing pyswisseph...
-python -m pip install --upgrade pip
+!PYTHON_CMD! -m pip install --upgrade pip
 
-:: Simplified wheel selection - detect architecture only
-echo Checking for local pre-built pyswisseph wheel...
-set "ARCH="
-:: Check if running on ARM64
-wmic OS get OSArchitecture | findstr /i "ARM64" > nul
-if %ERRORLEVEL% EQU 0 (
-    set "ARCH=win_arm64"
-) else (
-    set "ARCH=win_amd64"
-)
-echo Detected architecture: !ARCH!
-
-:: Find the wheel for this architecture
-set "WHEEL_DIR=%INSTALL_DIR%\wheels\!ARCH!"
-if exist "!WHEEL_DIR!" (
-    :: Find any wheel file in the directory
-    for /f "delims=" %%W in ('dir /b "!WHEEL_DIR!\*.whl" 2^>nul') do (
-        set "WHEEL_PATH=!WHEEL_DIR!\%%W"
-        goto install_wheel
-    )
-    echo No wheel files found in !WHEEL_DIR!
+:: Install pyswisseph directly from PyPI
+echo Installing pyswisseph from PyPI...
+!PYTHON_CMD! -m pip install pyswisseph>=2.10.3.2
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to install pyswisseph from PyPI.
+    echo This may be due to missing build tools.
+    echo Please ensure you have the Microsoft Visual C++ Build Tools installed.
+    echo You can download them from: https://visualstudio.microsoft.com/visual-cpp-build-tools/
     pause
     exit /b 1
-) else (
-    echo Wheel directory not found: !WHEEL_DIR!
+)
+echo Pyswisseph installed successfully.
+
+:: Now install other requirements
+echo Step 2: Installing other dependencies...
+!PYTHON_CMD! -m pip install -r requirements.txt
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to install dependencies from requirements.txt.
     pause
     exit /b 1
 )
 
-:install_wheel
-echo Found wheel: !WHEEL_PATH!
-python -m pip install "!WHEEL_PATH!" --no-deps
-if %ERRORLEVEL% EQU 0 (
-    echo Successfully installed pyswisseph from local wheel.
-    goto setup_ephemeris
-) else (
-    echo Failed to install from local wheel.
-    echo Please check that the wheel file is not corrupted.
-    pause
-    exit /b 1
-)
-
-:setup_ephemeris
-echo.
-echo Step 2: Setting up Swiss Ephemeris files...
+echo Step 3: Checking Swiss Ephemeris files...
 set SWEFILES_DIR=%INSTALL_DIR%\flatlib\resources\swefiles
 set SYSTEM_SWEFILES_DIR=C:\sweph\ephe
 

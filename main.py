@@ -35,9 +35,23 @@ from ui.utils.updater import check_for_updates_on_startup
 import flatlib
 from flatlib.ephem import setPath
 
+def get_application_path():
+    """
+    Get the application path, handling both normal execution and PyInstaller bundled execution.
+    
+    Returns:
+        str: The absolute path to the application directory
+    """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as a PyInstaller bundle
+        return sys._MEIPASS
+    else:
+        # Running in normal Python environment
+        return os.path.dirname(os.path.abspath(__file__))
+
 def ensure_ephemeris_files_exist():
     """Ensure Swiss Ephemeris files exist and set the path only once at startup."""
-    app_dir = os.path.dirname(os.path.abspath(__file__))
+    app_dir = get_application_path()
     
     # Use only the built-in path for swefiles
     swefiles_path = os.path.join(app_dir, 'flatlib', 'resources', 'swefiles')
@@ -105,7 +119,7 @@ def verify_swisseph_functionality(parent_window=None):
     Verify Swiss Ephemeris functionality in the background.
     If it fails, check if files exist and provide appropriate guidance.
     """
-    app_dir = os.path.dirname(os.path.abspath(__file__))
+    app_dir = get_application_path()
     swefiles_path = os.path.join(app_dir, 'flatlib', 'resources', 'swefiles')
     system_swefiles_path = "C:\\sweph\\ephe" if platform.system() == "Windows" else "/usr/local/share/sweph/ephe"
     
@@ -207,20 +221,31 @@ def exception_hook(exctype, value, traceback):
 
 
 def main():
-    """Main application entry point"""
+    """Main entry point for the application"""
     # Set up logging
     setup_logging()
     
-    # Set up global exception handler
+    # Set up exception handling
     sys.excepthook = exception_hook
     
     # Create application
     app = QApplication(sys.argv)
+    app.setApplicationName("KP Astrology Dashboard")
     
     # Set application icon
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'favicon.ico')
+    icon_path = os.path.join(get_application_path(), 'resources', 'favicon.ico')
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
+    
+    # Create splash screen
+    splash_path = os.path.join(get_application_path(), 'resources', 'splash.png')
+    if os.path.exists(splash_path):
+        splash_pixmap = QPixmap(splash_path)
+        splash = QSplashScreen(splash_pixmap, Qt.WindowStaysOnTopHint)
+        splash.show()
+        app.processEvents()
+    else:
+        splash = None
     
     # Create and show main window
     try:

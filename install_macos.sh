@@ -156,9 +156,10 @@ echo
 echo "Installing required packages..."
 python3 -m pip install --upgrade pip
 
-# Check for and uninstall existing flatlib and pyswisseph
-echo "Checking for existing flatlib and pyswisseph installations..."
-if python3 -m pip show flatlib &> /dev/null; then
+# Check for and uninstall existing flatlib
+echo "Checking for existing flatlib installation..."
+python3 -m pip show flatlib 2>/dev/null
+if [ $? -eq 0 ]; then
     echo "Removing existing flatlib installation..."
     python3 -m pip uninstall -y flatlib
     echo "Flatlib removed successfully."
@@ -166,61 +167,17 @@ else
     echo "Flatlib not found."
 fi
 
-if python3 -m pip show pyswisseph &> /dev/null; then
-    echo "Removing existing pyswisseph installation..."
-    python3 -m pip uninstall -y pyswisseph
-    echo "Pyswisseph removed successfully."
-else
-    echo "Pyswisseph not found."
-fi
-
-# Install pyswisseph from wheels directory based on architecture
-echo "Installing pyswisseph from wheels directory..."
-# Detect Python version
-PYTHON_VERSION=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
-echo "Detected Python version: $PYTHON_VERSION"
-
-# Map Python version to wheel version
-CP_VER=""
-if [ "$PYTHON_VERSION" == "3.9" ]; then CP_VER="cp39-cp39"; fi
-if [ "$PYTHON_VERSION" == "3.10" ]; then CP_VER="cp310-cp310"; fi
-if [ "$PYTHON_VERSION" == "3.11" ]; then CP_VER="cp311-cp311"; fi
-if [ "$PYTHON_VERSION" == "3.12" ]; then CP_VER="cp312-cp312"; fi
-if [ "$PYTHON_VERSION" == "3.13" ]; then CP_VER="cp313-cp313"; fi
-
-# Detect architecture
-if [[ $(uname -m) == "x86_64" ]]; then
-    ARCH="macosx_10_9_x86_64"
-elif [[ $(uname -m) == "arm64" ]]; then
-    ARCH="macosx_11_0_arm64"
-else
-    ARCH="macosx_10_9_x86_64"  # Default to x86_64 if unknown
-fi
-
-# Try to find architecture-appropriate wheel
-if [ -n "$CP_VER" ]; then
-    WHEEL_PATH="$INSTALL_DIR/wheels/$ARCH/pyswisseph-2.10.3.2-$CP_VER-$ARCH.whl"
-    if [ -f "$WHEEL_PATH" ]; then
-        echo "Found local wheel: $WHEEL_PATH"
-        python3 -m pip install "$WHEEL_PATH" --no-deps
-        if [ $? -eq 0 ]; then
-            echo "Successfully installed pyswisseph from local wheel."
-        else
-            echo "Failed to install from local wheel."
-            echo "Please check that the wheel file is not corrupted."
-            exit 1
-        fi
-    else
-        echo "No matching local wheel found for Python $PYTHON_VERSION on $ARCH"
-        echo "Expected wheel path: $WHEEL_PATH"
-        echo "Please ensure the appropriate wheel is available for your system."
-        exit 1
-    fi
-else
-    echo "Unsupported Python version: $PYTHON_VERSION"
-    echo "Please install a supported Python version (3.9-3.13)."
+# Install pyswisseph directly from PyPI
+echo "Installing pyswisseph from PyPI..."
+python3 -m pip install pyswisseph>=2.10.3.2
+if [ $? -ne 0 ]; then
+    echo "Failed to install pyswisseph from PyPI."
+    echo "This may be due to missing build tools."
+    echo "Please ensure you have Xcode Command Line Tools installed."
+    echo "You can install them by running: xcode-select --install"
     exit 1
 fi
+echo "Pyswisseph installed successfully."
 
 # Now install requirements
 echo "Installing required packages from requirements.txt..."

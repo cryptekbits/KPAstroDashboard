@@ -308,24 +308,14 @@ def download_workflow_artifacts(version, repo_info, root_dir):
     """Download artifacts from the GitHub Actions workflow"""
     tag_name = f"v{version}"
     artifacts_dir = root_dir / "release_artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
     
-    # Create artifacts directory if it doesn't exist
-    if not artifacts_dir.exists():
-        artifacts_dir.mkdir()
-    else:
-        # Clean up any existing files
-        for item in artifacts_dir.glob("*"):
-            if item.is_file():
-                item.unlink()
-            elif item.is_dir():
-                shutil.rmtree(item)
-    
-    print(f"Downloading build artifacts for release {tag_name}...")
+    print(f"Downloading artifacts for version {version}...")
     
     try:
-        # List workflow runs to find the one for our tag
+        # Get the workflow runs for this tag
         result = subprocess.run(
-            ["gh", "run", "list", "--repo", repo_info, "--json", "databaseId,headBranch,status,conclusion"],
+            ["gh", "run", "list", "--repo", repo_info, "--json", "status,name,headBranch,databaseId,conclusion"],
             cwd=root_dir,
             capture_output=True,
             text=True,
@@ -334,24 +324,26 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         
         runs = json.loads(result.stdout)
         
-        # Filter runs related to our tag that have completed successfully
-        tag_runs = [
-            run for run in runs 
-            if (run.get("headBranch") == tag_name or 
-                (run.get("headBranch", "").startswith("refs/tags/") and version in run.get("headBranch", "")))
-            and run.get("status") == "completed"
-            and run.get("conclusion") == "success"
-        ]
+        # Filter runs related to our tag
+        tag_runs = [run for run in runs if run.get("headBranch") == tag_name or (run.get("name") == "build" and "tags" in run.get("headBranch", ""))]
         
         if not tag_runs:
-            print(f"No completed workflow runs found for tag {tag_name}. Skipping artifact download.")
-            return []
+            print(f"No workflow runs found for tag {tag_name}.")
+            return False
         
-        # Get the run ID of the most recent successful run
-        run_id = tag_runs[0]["databaseId"]
+        # Find the most recent completed run
+        completed_runs = [run for run in tag_runs if run.get("status") == "completed" and run.get("conclusion") == "success"]
+        if not completed_runs:
+            print(f"No completed workflow runs found for tag {tag_name}.")
+            return False
         
-        # List artifacts for this run
-        print(f"Downloading artifacts from run ID: {run_id}")
+        # Sort by ID (higher is more recent)
+        completed_runs.sort(key=lambda x: x.get("databaseId", 0), reverse=True)
+        run_id = completed_runs[0].get("databaseId")
+        
+        print(f"Found completed workflow run: {run_id}")
+        
+        # Download artifacts
         artifacts_result = subprocess.run(
             ["gh", "run", "download", str(run_id), "--repo", repo_info, "--dir", str(artifacts_dir)],
             cwd=root_dir,
@@ -362,231 +354,146 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         
         if artifacts_result.returncode != 0:
             print(f"Error downloading artifacts: {artifacts_result.stderr}")
-            return []
+            return False
         
         print(f"Downloaded artifacts to {artifacts_dir}")
         
-        # List downloaded artifacts
-        artifact_files = []
-        for root, dirs, files in os.walk(artifacts_dir):
-            for file in files:
-                file_path = Path(os.path.join(root, file))
-                artifact_files.append(file_path)
-                print(f"  - {file_path.relative_to(artifacts_dir)}")
+        # Check what we've downloaded
+        artifacts = list(artifacts_dir.glob("**/*"))
+        if not artifacts:
+            print("No artifacts were downloaded.")
+            return False
         
-        print(f"Found {len(artifact_files)} artifact files")
+        print(f"Downloaded {len(artifacts)} artifacts:")
+        for artifact in artifacts:
+            print(f"  - {artifact.relative_to(artifacts_dir)}")
         
-        # Expected artifact patterns
-        source_zip_pattern = f"**/KPAstrologyDashboard-{version}.zip"
-        windows_installer_pattern = "**/KPAstrologyDashboard-Windows-Installer.bat"
-        macos_installer_pattern = "**/KPAstrologyDashboard-macOS-Installer.sh"
-        
-        # Find and rename artifacts to match expected naming convention
-        renamed_artifacts = []
+        # Prepare the artifacts for release
+        release_dir = root_dir / "release"
+        release_dir.mkdir(exist_ok=True)
         
         # Source code ZIP
-        source_zips = list(artifacts_dir.glob(source_zip_pattern))
-        if source_zips:
-            source_zip = source_zips[0]
-            renamed_artifacts.append(source_zip)
-            print(f"Found source code ZIP: {source_zip.name}")
-        else:
-            print("No source code ZIP found")
+        source_code_zips = list(artifacts_dir.glob("**/source-code/*.zip"))
+        if source_code_zips:
+            source_zip = source_code_zips[0]
+            target_path = release_dir / f"KPAstrologyDashboard-{version}.zip"
+            shutil.copy(source_zip, target_path)
+            print(f"Prepared source code ZIP: {target_path}")
         
         # Windows installer
-        windows_installers = list(artifacts_dir.glob(windows_installer_pattern))
+        windows_installers = list(artifacts_dir.glob("**/windows-installer/*.bat"))
         if windows_installers:
-            windows_installer = windows_installers[0]
-            renamed_artifacts.append(windows_installer)
-            print(f"Found Windows installer: {windows_installer.name}")
-        else:
-            print("No Windows installer found")
+            win_installer = windows_installers[0]
+            target_path = release_dir / "KPAstrologyDashboard-Windows-Installer.bat"
+            shutil.copy(win_installer, target_path)
+            print(f"Prepared Windows installer: {target_path}")
         
         # macOS installer
-        macos_installers = list(artifacts_dir.glob(macos_installer_pattern))
+        macos_installers = list(artifacts_dir.glob("**/macos-installer/*.sh"))
         if macos_installers:
-            macos_installer = macos_installers[0]
-            renamed_artifacts.append(macos_installer)
-            print(f"Found macOS installer: {macos_installer.name}")
+            mac_installer = macos_installers[0]
+            target_path = release_dir / "KPAstrologyDashboard-macOS-Installer.sh"
+            shutil.copy(mac_installer, target_path)
+            chmod_plus_x(target_path)
             
-            # Create a macOS .command file (which is double-clickable)
-            macos_command_file = artifacts_dir / "KPAstrologyDashboard-macOS-Installer.command"
-            with open(macos_command_file, "w") as f:
-                # Get the content of the .sh file
-                with open(macos_installer, "r") as sh_file:
-                    sh_content = sh_file.read()
-                
-                # Write the same content to the .command file
-                f.write(sh_content)
+            # Also create a .command file (double-clickable on macOS)
+            command_path = release_dir / "KPAstrologyDashboard-macOS-Installer.command"
+            shutil.copy(mac_installer, command_path)
+            chmod_plus_x(command_path)
+            print(f"Prepared macOS installers: {target_path} and {command_path}")
             
-            # Make the command file executable
-            os.chmod(macos_command_file, 0o755)
+        # Windows executable
+        windows_exes = list(artifacts_dir.glob("**/windows-executable/*.exe"))
+        if windows_exes:
+            win_exe = windows_exes[0]
+            target_path = release_dir / f"KPAstrologyDashboard-{version}.exe"
+            shutil.copy(win_exe, target_path)
+            print(f"Prepared Windows executable: {target_path}")
             
-            # Add it to the renamed artifacts
-            renamed_artifacts.append(macos_command_file)
-            print(f"Created double-clickable macOS installer: {macos_command_file.name}")
-        else:
-            print("No macOS installer found")
+        # Windows executable ZIP
+        windows_exe_zips = list(artifacts_dir.glob("**/windows-executable-zip/*.zip"))
+        if windows_exe_zips:
+            win_exe_zip = windows_exe_zips[0]
+            target_path = release_dir / f"KPAstrologyDashboard-{version}-Windows.zip"
+            shutil.copy(win_exe_zip, target_path)
+            print(f"Prepared Windows executable ZIP: {target_path}")
         
-        if not renamed_artifacts:
-            print("Warning: No artifacts were found that match the expected patterns.")
-            print("Available files:")
-            for artifact in artifact_files:
-                print(f"  - {artifact.relative_to(artifacts_dir)}")
-            
-            # If we couldn't find any matching artifacts, just return all artifact files
-            print("Returning all artifact files instead.")
-            return artifact_files
-        
-        return renamed_artifacts
+        return True
     except Exception as e:
-        print(f"Error downloading workflow artifacts: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
+        print(f"Error downloading artifacts: {e}")
+        return False
 
 
 def create_github_release(version):
-    """Create a GitHub release with artifacts from GitHub Actions"""
+    """Create a GitHub release with the artifacts"""
     root_dir = Path(__file__).parent.parent
     tag_name = f"v{version}"
-    artifacts_dir = root_dir / "release_artifacts"
+    release_dir = root_dir / "release"
     
     try:
         repo_info = get_repo_info()
-    except Exception as e:
-        print(f"Error getting repository information: {e}")
-        print("Please create the release manually with the following steps:")
-        print(f"1. Go to the GitHub repository releases page")
-        print(f"2. Create a new release with tag '{tag_name}'")
-        print(f"3. Add release notes and upload the artifacts")
-        return False
-    
-    # Check if release already exists
-    try:
-        check_result = subprocess.run(
-            ["gh", "release", "view", tag_name, "--repo", repo_info],
+        
+        # Check if the release already exists
+        result = subprocess.run(
+            ["gh", "release", "view", tag_name, "--repo", repo_info, "--json", "name"],
             cwd=root_dir,
             capture_output=True,
             text=True,
             check=False
         )
         
-        if check_result.returncode == 0:
-            print(f"Release {tag_name} already exists.")
-            
-            # Check if we need to upload build artifacts
-            if f"KPAstrologyDashboard-{version}.zip" not in check_result.stdout:
-                print("Downloading and uploading build artifacts...")
-                artifacts = download_workflow_artifacts(version, repo_info, root_dir)
-                
-                if artifacts:
-                    print("\nPreparing to upload the following artifacts to GitHub release:")
-                    for artifact in artifacts:
-                        print(f"  - {artifact.name}")
-                    
-                    print("\nDistribution formats:")
-                    print(f"  - Source code: KPAstrologyDashboard-{version}.zip")
-                    print(f"  - Windows installer: KPAstrologyDashboard-Windows-Installer.bat")
-                    print(f"  - macOS installer: KPAstrologyDashboard-macOS-Installer.sh")
-                    print(f"  - macOS clickable installer: KPAstrologyDashboard-macOS-Installer.command")
-                    
-                    for artifact in artifacts:
-                        print(f"Uploading {artifact.name} to release...")
-                        upload_result = subprocess.run(
-                            ["gh", "release", "upload", tag_name, str(artifact), "--repo", repo_info],
-                            cwd=root_dir,
-                            capture_output=True,
-                            text=True,
-                            check=False
-                        )
-                        
-                        if upload_result.returncode == 0:
-                            print(f"Successfully uploaded {artifact.name}")
-                        else:
-                            print(f"Error uploading {artifact.name}: {upload_result.stderr}")
-                else:
-                    print("No build artifacts found to upload.")
-            else:
-                print("Build artifacts already exist in the release.")
-                
-            return True
-    except Exception as e:
-        print(f"Error checking existing release: {e}")
-    
-    # Generate release notes
-    release_notes = get_release_notes()
-    
-    # Download build artifacts
-    print("Downloading build artifacts from GitHub Actions...")
-    artifacts = download_workflow_artifacts(version, repo_info, root_dir)
-    
-    if not artifacts:
-        print("No build artifacts found or downloaded. The release will be created without build artifacts.")
-        print("You can manually add the artifacts later by downloading them from the GitHub Actions workflow.")
-    else:
-        print("\nThe following artifacts will be uploaded to the GitHub release:")
-        for artifact in artifacts:
-            print(f"  - {artifact.name}")
+        release_exists = result.returncode == 0
         
-        print("\nDistribution formats:")
-        print(f"  - Source code: KPAstrologyDashboard-{version}.zip")
-        print(f"  - Windows installer: KPAstrologyDashboard-Windows-Installer.bat")
-        print(f"  - macOS installer: KPAstrologyDashboard-macOS-Installer.sh")
-        print(f"  - macOS clickable installer: KPAstrologyDashboard-macOS-Installer.command")
-    
-    try:
-        # Create a GitHub release using GitHub CLI
-        create_cmd = [
+        if release_exists:
+            print(f"Release {tag_name} already exists. Updating it...")
+            
+            # Delete the existing release (but keep the tag)
+            subprocess.run(
+                ["gh", "release", "delete", tag_name, "--repo", repo_info, "--yes"],
+                cwd=root_dir,
+                check=False
+            )
+        
+        # Generate release notes
+        release_notes = get_release_notes()
+        release_notes_file = root_dir / "release_notes.md"
+        with open(release_notes_file, "w") as f:
+            f.write(release_notes)
+        
+        # Create the release
+        create_args = [
             "gh", "release", "create", tag_name,
+            "--repo", repo_info,
             "--title", f"KP Astrology Dashboard {version}",
-            "--notes", release_notes,
-            "--repo", repo_info
+            "--notes-file", str(release_notes_file)
         ]
         
-        # Add artifacts to the command
-        for artifact in artifacts:
-            create_cmd.append(str(artifact))
+        # Add files to the release
+        if release_dir.exists():
+            for file in release_dir.glob("*"):
+                create_args.append(str(file))
         
-        create_result = subprocess.run(
-            create_cmd,
+        result = subprocess.run(
+            create_args,
             cwd=root_dir,
             capture_output=True,
             text=True,
             check=False
         )
         
-        if create_result.returncode == 0:
-            print(f"Created GitHub release {tag_name} with all artifacts")
-            return True
-        else:
-            error_message = create_result.stderr.strip()
-            
-            # Check if it failed due to the release already existing
-            if "already exists" in error_message:
-                print(f"Release {tag_name} already exists. Uploading artifacts...")
-                
-                for artifact in artifacts:
-                    print(f"Uploading {artifact.name} to release...")
-                    upload_result = subprocess.run(
-                        ["gh", "release", "upload", tag_name, str(artifact), "--repo", repo_info],
-                        cwd=root_dir,
-                        capture_output=True,
-                        text=True,
-                        check=False
-                    )
-                    
-                    if upload_result.returncode == 0:
-                        print(f"Successfully uploaded {artifact.name}")
-                    else:
-                        print(f"Error uploading {artifact.name}: {upload_result.stderr}")
-                
-                return True
-            else:
-                print(f"Error creating GitHub release: {error_message}")
-                return False
+        if result.returncode != 0:
+            print(f"Error creating release: {result.stderr}")
+            return False
+        
+        print(f"Successfully created release {tag_name}")
+        
+        # Clean up
+        if release_notes_file.exists():
+            release_notes_file.unlink()
+        
+        return True
     except Exception as e:
-        print(f"Error creating GitHub release: {e}")
+        print(f"Error creating release: {e}")
         return False
 
 
@@ -639,6 +546,16 @@ def get_repo_info():
         print(f"Error getting repository information from git: {e}")
     
     raise ValueError("Could not determine repository owner and name")
+
+
+def chmod_plus_x(file_path):
+    """Make a file executable"""
+    try:
+        os.chmod(file_path, 0o755)
+        return True
+    except Exception as e:
+        print(f"Error making file executable: {e}")
+        return False
 
 
 def main():

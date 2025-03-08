@@ -10,30 +10,96 @@ set VERSION=##VERSION##
 set REPO_OWNER=cryptekbits
 set REPO_NAME=KPAstroDashboard
 set DOWNLOAD_URL=https://github.com/%REPO_OWNER%/%REPO_NAME%/archive/refs/tags/v%VERSION%.zip
-set INSTALL_DIR=%USERPROFILE%\KPAstrologyDashboard
 set REQUIRED_PYTHON_VERSION=3.13.2
 
-echo Creating installation directory...
+:: Detect Desktop and Downloads directories (handle OneDrive case)
+echo Detecting user directories...
+:: Primary Desktop
+set "DESKTOP_DIR=%USERPROFILE%\Desktop"
+:: Primary Downloads
+set "DOWNLOADS_DIR=%USERPROFILE%\Downloads"
+
+:: Check for OneDrive Desktop
+set "ONEDRIVE_DESKTOP=%USERPROFILE%\OneDrive\Desktop"
+set "HAS_ONEDRIVE_DESKTOP=false"
+if exist "%ONEDRIVE_DESKTOP%" (
+    echo OneDrive Desktop detected at: %ONEDRIVE_DESKTOP%
+    set "HAS_ONEDRIVE_DESKTOP=true"
+)
+
+:: Check for other potential Desktop locations
+set "OTHER_DESKTOP="
+:: Check Documents\Desktop
+if exist "%USERPROFILE%\Documents\Desktop" (
+    set "OTHER_DESKTOP=%USERPROFILE%\Documents\Desktop"
+    echo Additional Desktop detected at: !OTHER_DESKTOP!
+)
+
+:: Check for OneDrive Downloads
+set "ONEDRIVE_DOWNLOADS=%USERPROFILE%\OneDrive\Downloads"
+if exist "%ONEDRIVE_DOWNLOADS%" (
+    echo OneDrive Downloads detected at: %ONEDRIVE_DOWNLOADS%
+    set "DOWNLOADS_DIR=%ONEDRIVE_DOWNLOADS%"
+)
+
+:: Set installation directory on primary Desktop
+set INSTALL_DIR=%DESKTOP_DIR%\KPAstrologyDashboard
+
+echo Installation directory will be: %INSTALL_DIR%
+echo Download directory will be: %DOWNLOADS_DIR%
+echo.
+
+:: Create installation directory if it doesn't exist
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-:: Download the release zip
-echo.
-echo Downloading KP Astrology Dashboard v%VERSION%...
-echo URL: %DOWNLOAD_URL%
+:: Check if zip file already exists from a previous download
+set LOCAL_ZIP_FILE=%DOWNLOADS_DIR%\KPAstrologyDashboard-%VERSION%.zip
+if exist "%LOCAL_ZIP_FILE%" (
+    echo.
+    echo Previously downloaded KP Astrology Dashboard v%VERSION% found.
+    echo Location: %LOCAL_ZIP_FILE%
+    echo Skipping download phase.
+) else (
+    :: Download the release zip with progress indicator
+    echo.
+    echo Downloading KP Astrology Dashboard v%VERSION%...
+    echo URL: %DOWNLOAD_URL%
+    
+    :: PowerShell script for download with progress
+    powershell -Command "& {$ProgressPreference = 'Continue'; $wc = New-Object System.Net.WebClient; $wc.Headers.Add('User-Agent', 'KPAstroDashboard Installer'); $dest = '%LOCAL_ZIP_FILE%'; $start = Get-Date; $totalSize = 0; $wc.DownloadFileAsync('%DOWNLOAD_URL%', $dest); $prevPercent = 0; Register-ObjectEvent -InputObject $wc -EventName DownloadProgressChanged -Action { $percent = $EventArgs.ProgressPercentage; if ($percent -ge $prevPercent + 5) { $currBytes = $EventArgs.BytesReceived; $totalBytes = $EventArgs.TotalBytesToReceive; $totalSize = $totalBytes; $elapsed = ((Get-Date) - $start).TotalSeconds; $speed = $currBytes / $elapsed / 1MB; $remaining = ($totalBytes - $currBytes) / ($speed * 1MB); Write-Host ('{0:N0}% complete - {1:N2} MB of {2:N2} MB - {3:N2} MB/s - ETA: {4:N0} sec' -f $percent, ($currBytes/1MB), ($totalBytes/1MB), $speed, $remaining) -ForegroundColor Cyan; $script:prevPercent = $percent; } }; Register-ObjectEvent -InputObject $wc -EventName DownloadFileCompleted -Action { Write-Host 'Download completed!' -ForegroundColor Green }; while ($wc.IsBusy) { Start-Sleep -Milliseconds 100 }; if (Test-Path $dest) { Write-Host ('Downloaded {0:N2} MB in {1:N2} seconds.' -f ($totalSize/1MB), ((Get-Date) - $start).TotalSeconds) -ForegroundColor Green; } else { Write-Host 'Download failed!' -ForegroundColor Red; exit 1 }}"
 
-powershell -Command "Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TEMP%\KPAstrologyDashboard.zip'"
+    if %ERRORLEVEL% NEQ 0 (
+        echo Failed to download the application package.
+        echo Please check your internet connection and try again.
+        pause
+        exit /b 1
+    )
+    
+    echo Download saved to: %LOCAL_ZIP_FILE%
+)
 
-if %ERRORLEVEL% NEQ 0 (
-    echo Failed to download the application package.
-    echo Please check your internet connection and try again.
-    pause
-    exit /b 1
+:: Check if files were already extracted to the destination
+if exist "%INSTALL_DIR%\main.py" (
+    echo.
+    echo Application files already exist in destination folder.
+    echo Would you like to re-extract the files? (Y/N)
+    set /p EXTRACT_CHOICE=Your choice: 
+    
+    if /i not "!EXTRACT_CHOICE!"=="Y" goto skip_extraction
 )
 
 :: Extract the zip file
 echo.
 echo Extracting files...
-powershell -Command "Expand-Archive -Path '%TEMP%\KPAstrologyDashboard.zip' -DestinationPath '%TEMP%\KPAstrologyDashboard-extract' -Force"
+:: Check if temp extraction dir already exists and contains files
+set "TEMP_EXTRACT_DIR=%TEMP%\KPAstrologyDashboard-extract"
+if exist "%TEMP_EXTRACT_DIR%" (
+    echo Cleaning previous temporary extraction directory...
+    rmdir /S /Q "%TEMP_EXTRACT_DIR%"
+)
+
+:: Extract using PowerShell with progress indicator
+powershell -Command "& {$ProgressPreference = 'Continue'; Write-Host 'Extracting archive...' -ForegroundColor Cyan; Expand-Archive -Path '%LOCAL_ZIP_FILE%' -DestinationPath '%TEMP_EXTRACT_DIR%' -Force}"
 
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to extract the application package.
@@ -45,13 +111,15 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo Moving files to installation directory...
 :: Find the extracted folder (it will be KPAstroDashboard-VERSION)
-for /d %%G in ("%TEMP%\KPAstrologyDashboard-extract\*") do (
+for /d %%G in ("%TEMP_EXTRACT_DIR%\*") do (
+    echo Copying from: %%G
     xcopy "%%G\*" "%INSTALL_DIR%" /E /I /Y
 )
 
-:: Delete the temporary files
-del "%TEMP%\KPAstrologyDashboard.zip"
-rmdir /S /Q "%TEMP%\KPAstrologyDashboard-extract"
+:: Clean up temp extraction directory
+rmdir /S /Q "%TEMP_EXTRACT_DIR%"
+
+:skip_extraction
 
 :: Change to the installation directory
 cd /d "%INSTALL_DIR%"
@@ -62,12 +130,32 @@ echo Checking Python installation...
 set PYTHON_INSTALLED=false
 set PYTHON_NEEDS_UPGRADE=false
 
-python --version > nul 2>&1
+:: Try different Python commands to detect installation
+:: First try python command
+python --version >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     set PYTHON_INSTALLED=true
+    set PYTHON_CMD=python
+) else (
+    :: Try python3 command
+    python3 --version >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        set PYTHON_INSTALLED=true
+        set PYTHON_CMD=python3
+    ) else (
+        :: Try py command
+        py --version >nul 2>&1
+        if %ERRORLEVEL% EQU 0 (
+            set PYTHON_INSTALLED=true
+            set PYTHON_CMD=py
+        )
+    )
+)
+
+if "!PYTHON_INSTALLED!"=="true" (
     :: Get Python version - handle both Python 2.x (stderr) and Python 3.x (stdout) output formats
-    for /f "tokens=*" %%V in ('python --version 2^>^&1') do set PYTHON_VERSION_OUTPUT=%%V
-    echo Found: %PYTHON_VERSION_OUTPUT%
+    for /f "tokens=*" %%V in ('!PYTHON_CMD! --version 2^>^&1') do set PYTHON_VERSION_OUTPUT=%%V
+    echo Found: !PYTHON_VERSION_OUTPUT!
     
     :: Extract version number from output (format: "Python X.Y.Z")
     for /f "tokens=2" %%V in ("!PYTHON_VERSION_OUTPUT!") do set CURRENT_PYTHON_VERSION=%%V
@@ -75,7 +163,7 @@ if %ERRORLEVEL% EQU 0 (
     :: Check if CURRENT_PYTHON_VERSION is empty
     if "!CURRENT_PYTHON_VERSION!"=="" (
         echo Error: Failed to detect Python version.
-        for /f "tokens=*" %%V in ('python --version 2^>^&1') do echo Python output: %%V
+        for /f "tokens=*" %%V in ('!PYTHON_CMD! --version 2^>^&1') do echo Python output: %%V
         echo Assuming Python version does not meet requirements.
         set PYTHON_NEEDS_UPGRADE=true
     ) else (
@@ -85,96 +173,91 @@ if %ERRORLEVEL% EQU 0 (
         if %ERRORLEVEL% EQU 0 (
             echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
         ) else (
-            :: If PowerShell comparison fails, try a simple batch comparison as fallback
-            echo PowerShell version comparison failed, trying fallback method...
-            
-            :: Extract major, minor, patch versions
-            for /f "tokens=1,2,3 delims=." %%a in ("!CURRENT_PYTHON_VERSION!") do (
-                set CURRENT_MAJOR=%%a
-                set CURRENT_MINOR=%%b
-                set CURRENT_PATCH=%%c
-            )
-            
-            for /f "tokens=1,2,3 delims=." %%a in ("%REQUIRED_PYTHON_VERSION%") do (
-                set REQUIRED_MAJOR=%%a
-                set REQUIRED_MINOR=%%b
-                set REQUIRED_PATCH=%%c
-            )
-            
-            :: Compare major version
-            if !CURRENT_MAJOR! GTR !REQUIRED_MAJOR! (
-                echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
-            ) else if !CURRENT_MAJOR! EQU !REQUIRED_MAJOR! (
-                :: Compare minor version
-                if !CURRENT_MINOR! GTR !REQUIRED_MINOR! (
-                    echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
-                ) else if !CURRENT_MINOR! EQU !REQUIRED_MINOR! (
-                    :: Compare patch version
-                    if !CURRENT_PATCH! GEQ !REQUIRED_PATCH! (
-                        echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
-                    ) else (
-                        echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
-                        set PYTHON_NEEDS_UPGRADE=true
-                    )
-                ) else (
-                    echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
-                    set PYTHON_NEEDS_UPGRADE=true
-                )
-            ) else (
-                echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
-                set PYTHON_NEEDS_UPGRADE=true
-            )
+            echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
+            set PYTHON_NEEDS_UPGRADE=true
         )
     )
 )
 
 :: Install or upgrade Python if needed
 if "!PYTHON_INSTALLED!"=="false" (
-    echo Python not found. Installing Python %REQUIRED_PYTHON_VERSION%...
+    echo Python not found. You need to install Python %REQUIRED_PYTHON_VERSION%...
     set INSTALL_PYTHON=true
 ) else if "!PYTHON_NEEDS_UPGRADE!"=="true" (
-    echo Upgrading Python to version %REQUIRED_PYTHON_VERSION%...
+    echo You need to upgrade Python to version %REQUIRED_PYTHON_VERSION%...
     set INSTALL_PYTHON=true
 ) else (
     set INSTALL_PYTHON=false
 )
 
 if "!INSTALL_PYTHON!"=="true" (
-    :: Create a temporary directory for the installer
-    mkdir %TEMP%\kp_dashboard_setup > nul 2>&1
-    cd %TEMP%\kp_dashboard_setup
+    :: Download Python installer to user's Downloads folder
+    set PYTHON_INSTALLER_PATH=%DOWNLOADS_DIR%\python-%REQUIRED_PYTHON_VERSION%-installer.exe
     
-    :: Download Python installer
-    echo Downloading Python installer...
-    powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/%REQUIRED_PYTHON_VERSION%/python-%REQUIRED_PYTHON_VERSION%-amd64.exe' -OutFile 'python-installer.exe'"
-    
-    if %ERRORLEVEL% NEQ 0 (
-        echo Failed to download Python installer.
-        echo Please install Python %REQUIRED_PYTHON_VERSION% or later manually from https://www.python.org/downloads/
-        pause
-        exit /b 1
+    :: Check if installer already exists
+    if exist "!PYTHON_INSTALLER_PATH!" (
+        echo Python installer already exists at: !PYTHON_INSTALLER_PATH!
+    ) else (
+        echo Downloading Python installer to your Downloads folder...
+        
+        :: Determine architecture - check for ARM64
+        set "ARCH=amd64"
+        wmic OS get OSArchitecture | findstr /i "ARM64" > nul
+        if %ERRORLEVEL% EQU 0 (
+            set "ARCH=arm64"
+            echo Detected ARM64 architecture
+        )
+        
+        :: Download installer with progress
+        set PYTHON_DOWNLOAD_URL=https://www.python.org/ftp/python/%REQUIRED_PYTHON_VERSION%/python-%REQUIRED_PYTHON_VERSION%-%ARCH%.exe
+        echo Download URL: !PYTHON_DOWNLOAD_URL!
+        
+        powershell -Command "& {$ProgressPreference = 'Continue'; $wc = New-Object System.Net.WebClient; $dest = '!PYTHON_INSTALLER_PATH!'; $start = Get-Date; $wc.DownloadFileAsync('!PYTHON_DOWNLOAD_URL!', $dest); Register-ObjectEvent -InputObject $wc -EventName DownloadProgressChanged -Action { $percent = $EventArgs.ProgressPercentage; $currBytes = $EventArgs.BytesReceived; $totalBytes = $EventArgs.TotalBytesToReceive; $elapsed = ((Get-Date) - $start).TotalSeconds; $speed = if ($elapsed -gt 0) { $currBytes / $elapsed / 1MB } else { 0 }; $remaining = if ($speed -gt 0) { ($totalBytes - $currBytes) / ($speed * 1MB) } else { 0 }; Write-Host ('{0:N0}% complete - {1:N2} MB of {2:N2} MB - {3:N2} MB/s - ETA: {4:N0} sec' -f $percent, ($currBytes/1MB), ($totalBytes/1MB), $speed, $remaining) -ForegroundColor Cyan }; Register-ObjectEvent -InputObject $wc -EventName DownloadFileCompleted -Action { Write-Host 'Download completed!' -ForegroundColor Green }; while ($wc.IsBusy) { Start-Sleep -Milliseconds 100 } }"
     )
     
-    :: Install Python with pip and add to PATH
-    echo Installing Python...
-    start /wait python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-    
-    :: Clean up
-    del python-installer.exe
-    cd /d "%INSTALL_DIR%"
+    :: Open the folder containing the Python installer
+    echo.
+    echo Please install Python %REQUIRED_PYTHON_VERSION% by running the installer.
+    echo Opening the download location for you...
+    explorer.exe /select,"%PYTHON_INSTALLER_PATH%"
+    echo.
+    echo IMPORTANT: During installation, make sure to check:
+    echo - "Add Python to PATH"
+    echo - "Install for all users" (recommended)
+    echo.
+    echo After installing Python, please come back to this window and press any key to continue.
+    pause
     
     :: Verify installation
     echo Verifying Python installation...
-    python --version > nul 2>&1
-    if %ERRORLEVEL% NEQ 0 (
-        echo Failed to install Python automatically.
-        echo Please install Python %REQUIRED_PYTHON_VERSION% or later manually from https://www.python.org/downloads/
-        pause
-        exit /b 1
+    python --version >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        set PYTHON_CMD=python
+    ) else (
+        python3 --version >nul 2>&1
+        if %ERRORLEVEL% EQU 0 (
+            set PYTHON_CMD=python3
+        ) else (
+            py --version >nul 2>&1
+            if %ERRORLEVEL% EQU 0 (
+                set PYTHON_CMD=py
+            ) else (
+                echo Failed to find Python after installation.
+                echo Please make sure Python was installed correctly and "Add Python to PATH" was selected.
+                echo You may need to restart your computer for PATH changes to take effect.
+                echo.
+                echo Do you want to continue anyway? (Y/N)
+                set /p CONTINUE_CHOICE=Your choice: 
+                if /i not "!CONTINUE_CHOICE!"=="Y" (
+                    exit /b 1
+                )
+                set PYTHON_CMD=python
+            )
+        )
     )
     
-    for /f "tokens=2" %%V in ('python --version 2^>^&1') do set INSTALLED_PYTHON_VERSION=%%V
-    echo Python %INSTALLED_PYTHON_VERSION% installed successfully.
+    for /f "tokens=2" %%V in ('!PYTHON_CMD! --version 2^>^&1') do set INSTALLED_PYTHON_VERSION=%%V
+    echo Python !INSTALLED_PYTHON_VERSION! detected.
 ) else (
     echo Python %CURRENT_PYTHON_VERSION% is already installed and meets requirements.
 )
@@ -182,74 +265,39 @@ if "!INSTALL_PYTHON!"=="true" (
 :: Install required packages
 echo.
 echo Installing required packages...
-python -m pip install --upgrade pip
+%PYTHON_CMD% -m pip install --upgrade pip
 
-:: Check for and uninstall existing flatlib and pyswisseph
-echo Checking for existing flatlib and pyswisseph installations...
-python -m pip show flatlib >nul 2>&1
+:: Check for and uninstall existing flatlib
+echo Checking for existing flatlib installation...
+%PYTHON_CMD% -m pip show flatlib 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo Removing existing flatlib installation...
-    python -m pip uninstall -y flatlib
+    %PYTHON_CMD% -m pip uninstall -y flatlib
     echo Flatlib removed successfully.
 ) else (
     echo Flatlib not found.
 )
 
-python -m pip show pyswisseph >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo Removing existing pyswisseph installation...
-    python -m pip uninstall -y pyswisseph
-    echo Pyswisseph removed successfully.
-) else (
-    echo Pyswisseph not found.
-)
-
-:: Install pyswisseph from wheels
-echo Installing pyswisseph from wheels directory...
-
-:: Simplified wheel selection - detect architecture only
-set "ARCH="
-:: Check if running on ARM64
-wmic OS get OSArchitecture | findstr /i "ARM64" > nul
-if %ERRORLEVEL% EQU 0 (
-    set "ARCH=win_arm64"
-) else (
-    set "ARCH=win_amd64"
-)
-echo Detected architecture: !ARCH!
-
-:: Find the wheel for this architecture
-set "WHEEL_DIR=%INSTALL_DIR%\wheels\!ARCH!"
-if exist "!WHEEL_DIR!" (
-    :: Find any wheel file in the directory
-    for /f "delims=" %%W in ('dir /b "!WHEEL_DIR!\*.whl" 2^>nul') do (
-        set "WHEEL_PATH=!WHEEL_DIR!\%%W"
-        goto install_wheel
-    )
-    echo No wheel files found in !WHEEL_DIR!
-    pause
-    exit /b 1
-) else (
-    echo Wheel directory not found: !WHEEL_DIR!
+:: Install pyswisseph directly from PyPI
+echo Installing pyswisseph from PyPI...
+%PYTHON_CMD% -m pip install pyswisseph>=2.10.3.2
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to install pyswisseph from PyPI.
+    echo This may be due to missing build tools.
+    echo Please ensure you have the Microsoft Visual C++ Build Tools installed.
+    echo You can download them from: https://visualstudio.microsoft.com/visual-cpp-build-tools/
     pause
     exit /b 1
 )
+echo Pyswisseph installed successfully.
 
-:install_wheel
-echo Found wheel: !WHEEL_PATH!
-python -m pip install "!WHEEL_PATH!" --no-deps
-if %ERRORLEVEL% EQU 0 (
-    echo Successfully installed pyswisseph from local wheel.
-) else (
-    echo Failed to install from local wheel.
-    echo Please check that the wheel file is not corrupted.
-    pause
-    exit /b 1
-)
+:: Install other dependencies
+echo Installing other dependencies...
 
-:: Now install requirements
-echo Installing required packages from requirements.txt...
-python -m pip install -r requirements.txt
+:: Install required packages
+echo.
+echo Installing required packages...
+%PYTHON_CMD% -m pip install -r requirements.txt
 
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to install required packages.
@@ -356,16 +404,35 @@ if not exist "%SYSTEM_SWEFILES_DIR%" (
 
 :skip_ephemeris
 
-:: Create desktop shortcut
+:: Create desktop shortcuts on all detected Desktop locations
 echo.
-echo Creating desktop shortcut...
-set DESKTOP_DIR=%USERPROFILE%\Desktop
+echo Creating desktop shortcuts...
 set APP_DIR=%INSTALL_DIR%
-set SHORTCUT=%DESKTOP_DIR%\KPAstrologyDashboard.lnk
 set ICON_PATH=%APP_DIR%\resources\favicon.ico
 
-:: Create shortcut using PowerShell
-powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = 'python'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
+:: Create shortcut on primary Desktop
+set SHORTCUT=%DESKTOP_DIR%\KPAstrologyDashboard.lnk
+echo Creating shortcut at: %SHORTCUT%
+powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT%'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
+
+:: Create shortcut on OneDrive Desktop if it exists
+if "!HAS_ONEDRIVE_DESKTOP!"=="true" (
+    set ONEDRIVE_SHORTCUT=%ONEDRIVE_DESKTOP%\KPAstrologyDashboard.lnk
+    echo Creating shortcut at: %ONEDRIVE_SHORTCUT%
+    powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%ONEDRIVE_SHORTCUT%'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
+    
+    :: Also create a shortcut to the application folder on OneDrive Desktop
+    set FOLDER_SHORTCUT=%ONEDRIVE_DESKTOP%\KPAstrologyDashboard-Folder.lnk
+    echo Creating folder shortcut at: %FOLDER_SHORTCUT%
+    powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%FOLDER_SHORTCUT%'); $Shortcut.TargetPath = '%APP_DIR%'; $Shortcut.Save()"
+)
+
+:: Create shortcut on other Desktop location if detected
+if not "!OTHER_DESKTOP!"=="" (
+    set OTHER_SHORTCUT=!OTHER_DESKTOP!\KPAstrologyDashboard.lnk
+    echo Creating shortcut at: !OTHER_SHORTCUT!
+    powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('!OTHER_SHORTCUT!'); $Shortcut.TargetPath = '!PYTHON_CMD!'; $Shortcut.Arguments = '%APP_DIR%\main.py'; $Shortcut.WorkingDirectory = '%APP_DIR%'; $Shortcut.IconLocation = '%ICON_PATH%'; $Shortcut.Save()"
+)
 
 echo.
 echo Installation completed successfully!

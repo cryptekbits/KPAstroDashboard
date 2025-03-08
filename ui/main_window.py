@@ -308,8 +308,21 @@ class KPAstrologyApp(QMainWindow):
             export_location = ""
             if 'location' in export_settings and export_settings['location'].strip():
                 export_location = export_settings['location']
-                if not os.path.exists(export_location):
-                    os.makedirs(export_location, exist_ok=True)
+                # Normalize the path to ensure it works on the current OS
+                export_location = os.path.normpath(export_location)
+                # Check if the directory exists and is actually a directory
+                if os.path.exists(export_location):
+                    if not os.path.isdir(export_location):
+                        # If it exists but is not a directory, use the user's home directory instead
+                        logging.warning(f"Export location {export_location} exists but is not a directory. Using home directory instead.")
+                        export_location = os.path.expanduser("~")
+                else:
+                    # Try to create the directory if it doesn't exist
+                    try:
+                        os.makedirs(export_location, exist_ok=True)
+                    except Exception as e:
+                        logging.warning(f"Failed to create export directory {export_location}: {str(e)}. Using home directory instead.")
+                        export_location = os.path.expanduser("~")
             
             # Combine path and filename
             filepath = os.path.join(export_location, filename) if export_location else filename
