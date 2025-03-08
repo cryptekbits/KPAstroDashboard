@@ -3,7 +3,7 @@
 Release Creation Tool for KP Dashboard
 
 This script helps create a new release by:
-1. Updating the version.py file with new version information
+1. Updating the VERSION_FILE_NAME file with new version information
 2. Updating the README.md with the new version tag
 3. Creating a tag and pushing it to GitHub
 4. Triggering GitHub Actions to build the application
@@ -21,10 +21,16 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+# Constants
+VERSION_FILE_NAME = "version.py"
+ABORT_MESSAGE = "Aborting release process."
+CONTINUE_PROMPT = "Do you want to continue with the release process anyway? (y/n): "
+VERSION_CONTINUE_PROMPT = "Do you want to proceed with the release process without updating the version? (y/n): "
+
 
 def update_version_file(version, version_name):
-    """Update the version.py file with new version information"""
-    version_file_path = Path(__file__).parent.parent / "version.py"
+    """Update the VERSION_FILE_NAME file with new version information"""
+    version_file_path = Path(__file__).parent.parent / VERSION_FILE_NAME
     
     with open(version_file_path, "r") as f:
         lines = f.readlines()
@@ -40,7 +46,7 @@ def update_version_file(version, version_name):
             else:
                 f.write(line)
     
-    print(f"Updated version.py with version {version} ({version_name})")
+    print(f"Updated {VERSION_FILE_NAME} with version {version} ({version_name})")
 
 
 def update_readme(version):
@@ -64,25 +70,24 @@ def update_readme(version):
 
 
 def git_commit_and_push(version):
-    """Commit changes and push to GitHub"""
+    """Commit the updated version files and push to GitHub"""
     root_dir = Path(__file__).parent.parent
-    tag_name = f"v{version}"
     
     try:
-        # Check if there are any changes to commit
+        # Check if there are changes to commit
         status_result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=root_dir,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "status", "--porcelain"], 
+            cwd=root_dir, 
+            check=True, 
+            capture_output=True, 
+            text=True
         )
         
         has_changes = bool(status_result.stdout.strip())
         
         if has_changes:
             # Stage the changes
-            subprocess.run(["git", "add", "version.py", "README.md"], cwd=root_dir, check=True)
+            subprocess.run(["git", "add", VERSION_FILE_NAME, "README.md"], cwd=root_dir, check=True)
             
             # Commit the changes
             subprocess.run(["git", "commit", "-m", f"Release v{version}"], cwd=root_dir, check=True)
@@ -91,6 +96,7 @@ def git_commit_and_push(version):
             print("No changes to commit. Proceeding with tag creation.")
         
         # Check if the tag already exists
+        tag_name = f"v{version}"
         tag_exists_result = subprocess.run(
             ["git", "tag", "-l", tag_name],
             cwd=root_dir,
@@ -196,11 +202,11 @@ def wait_for_workflow_completion(version, timeout=1800):
     except Exception as e:
         print(f"Error getting repository information: {e}")
         print("Skipping workflow check and proceeding with release.")
-        proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+        proceed = input(CONTINUE_PROMPT)
         if proceed.lower() == 'y':
             return True
         else:
-            print("Aborting release process.")
+            print(ABORT_MESSAGE)
             return False
     
     # First check if there are any workflows running for this tag
@@ -242,11 +248,11 @@ def wait_for_workflow_completion(version, timeout=1800):
             
             if not tag_runs:
                 print(f"Timeout reached while waiting for workflow to start after {timeout} seconds.")
-                proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+                proceed = input(CONTINUE_PROMPT)
                 if proceed.lower() == 'y':
                     return True
                 else:
-                    print("Aborting release process.")
+                    print(ABORT_MESSAGE)
                     return False
         else:
             # Check if any of the runs are already completed successfully
@@ -286,31 +292,31 @@ def wait_for_workflow_completion(version, timeout=1800):
                                 return True
                             else:
                                 print(f"Workflow completed with conclusion: {conclusion}")
-                                proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+                                proceed = input(CONTINUE_PROMPT)
                                 if proceed.lower() == 'y':
                                     return True
                                 else:
-                                    print("Aborting release process.")
+                                    print(ABORT_MESSAGE)
                                     return False
                     
                     print("Continuing to wait...")
                     time.sleep(30)
                 
                 print(f"Timeout reached after {timeout} seconds.")
-                proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+                proceed = input(CONTINUE_PROMPT)
                 if proceed.lower() == 'y':
                     return True
                 else:
-                    print("Aborting release process.")
+                    print(ABORT_MESSAGE)
                     return False
     
     except Exception as e:
         print(f"Error checking workflow status: {e}")
-        proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+        proceed = input(CONTINUE_PROMPT)
         if proceed.lower() == 'y':
             return True
         else:
-            print("Aborting release process.")
+            print(ABORT_MESSAGE)
             return False
 
 
@@ -320,14 +326,25 @@ def update_github_release(version):
     try:
         repo_info = get_repo_info()
         if not repo_info:
+            print("Failed to get repository information")
             return False
+        
+        print(f"Repository info: {repo_info}")
         
         # Get GitHub token
         gh_token = os.environ.get("GITHUB_TOKEN")
         if not gh_token:
             print("GitHub token not found. Set the GITHUB_TOKEN environment variable.")
+            print("Run: export GITHUB_TOKEN=your_token_here")
             return False
         
+        # Check if token is valid (just checking length as a basic validation)
+        if len(gh_token) < 10:
+            print(f"GitHub token appears to be invalid (length: {len(gh_token)})")
+            print("Make sure you've set a valid token with: export GITHUB_TOKEN=your_token_here")
+            return False
+            
+        print(f"GitHub token found (length: {len(gh_token)})")
         print(f"Updating GitHub release with release notes...")
         
         # Check if release already exists
@@ -345,14 +362,18 @@ def update_github_release(version):
         while attempt < max_attempts:
             # Get release by tag
             release_url = f"https://api.github.com/repos/{repo_info}/releases/tags/{release_tag}"
+            print(f"Checking for release at: {release_url}")
+            
             response = requests.get(release_url, headers=headers)
+            print(f"Response status: {response.status_code}")
             
             if response.status_code == 200:
                 existing_release = response.json()
                 release_id = existing_release["id"]
-                print(f"Release {release_tag} found. Updating it...")
+                print(f"Release {release_tag} found. Release ID: {release_id}")
                 break
             else:
+                print(f"Response body: {response.text}")
                 attempt += 1
                 if attempt < max_attempts:
                     print(f"Release {release_tag} not found (attempt {attempt}/{max_attempts}). Waiting for it to be created...")
@@ -363,25 +384,37 @@ def update_github_release(version):
                     return False
         
         if release_id:
+            # Get release notes
+            release_notes = get_release_notes()
+            print(f"Generated release notes ({len(release_notes)} characters)")
+            print("First 100 characters of release notes:")
+            print(release_notes[:100] + "..." if len(release_notes) > 100 else release_notes)
+            
             # Update release with new release notes
             update_data = {
-                "body": get_release_notes()
+                "body": release_notes
             }
             
             update_url = f"https://api.github.com/repos/{repo_info}/releases/{release_id}"
+            print(f"Updating release at: {update_url}")
+            
             response = requests.patch(update_url, headers=headers, json=update_data)
+            print(f"Update response status: {response.status_code}")
             
             if response.status_code == 200:
                 print(f"✓ Updated release notes for {release_tag}")
                 return True
             else:
-                print(f"Failed to update release: {response.status_code} - {response.text}")
+                print(f"Failed to update release: {response.status_code}")
+                print(f"Response body: {response.text}")
                 return False
         
         return False
             
     except Exception as e:
         print(f"Error updating GitHub release: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -389,8 +422,8 @@ def get_repo_info():
     """Get the repository owner and name"""
     root_dir = Path(__file__).parent.parent
     
-    # Try to get from version.py first
-    version_file_path = root_dir / "version.py"
+    # Try to get from VERSION_FILE_NAME first
+    version_file_path = root_dir / VERSION_FILE_NAME
     repo_owner = None
     repo_name = None
     
@@ -402,7 +435,7 @@ def get_repo_info():
                 elif line.startswith("GITHUB_REPO_NAME ="):
                     repo_name = line.split("=")[1].strip().strip('"\'')
     
-    # If we have both values from version.py, return them
+    # If we have both values from VERSION_FILE_NAME, return them
     if repo_owner and repo_name:
         return f"{repo_owner}/{repo_name}"
     
@@ -461,7 +494,7 @@ def main():
     
     # Check if the version is already set to the requested version
     current_version = None
-    version_file_path = Path(__file__).parent.parent / "version.py"
+    version_file_path = Path(__file__).parent.parent / VERSION_FILE_NAME
     
     with open(version_file_path, "r") as f:
         for line in f:
@@ -471,9 +504,9 @@ def main():
     
     if current_version == args.version and not args.force:
         print(f"Version is already set to {args.version}. Use --force to update anyway.")
-        proceed = input("Do you want to proceed with the release process without updating the version? (y/n): ")
+        proceed = input(VERSION_CONTINUE_PROMPT)
         if proceed.lower() != 'y':
-            print("Aborting release process.")
+            print(ABORT_MESSAGE)
             return
         print("Proceeding with release process without updating version files...")
     else:
@@ -489,9 +522,9 @@ def main():
         push_success = git_commit_and_push(args.version)
         if not push_success:
             print("Warning: There were issues with git operations.")
-            proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+            proceed = input(CONTINUE_PROMPT)
             if proceed.lower() != 'y':
-                print("Aborting release process.")
+                print(ABORT_MESSAGE)
                 return
         
         if not args.no_wait:
@@ -511,7 +544,7 @@ def main():
             try:
                 repo_info = get_repo_info()
                 print(f"You can view the release at: https://github.com/{repo_info}/releases/tag/v{args.version}")
-            except:
+            except Exception:
                 print("Please check your GitHub repository for the release.")
         else:
             print(f"\n⚠️ Release v{args.version} process completed with warnings.")

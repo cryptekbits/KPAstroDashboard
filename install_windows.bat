@@ -504,7 +504,9 @@ if "!MISSING_FILES!"=="true" (
     echo Some required Swiss Ephemeris files are missing from the source directory.
     echo Please ensure the application package is complete.
     goto skip_ephemeris
-) else (
+)
+
+if "!MISSING_FILES!"=="false" (
     echo All required ephemeris files are present in the application directory.
 )
 
