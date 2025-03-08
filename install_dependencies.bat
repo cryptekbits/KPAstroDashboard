@@ -38,48 +38,44 @@ if %ERRORLEVEL% EQU 0 (
 echo Step 1: Installing pyswisseph...
 python -m pip install --upgrade pip
 
-:: Try to use local wheels first
+:: Simplified wheel selection - detect architecture only
 echo Checking for local pre-built pyswisseph wheel...
-set "PYTHON_VERSION="
-for /f "tokens=2" %%i in ('python -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"') do (
-    set "PYTHON_VERSION=%%i"
-)
-echo Detected Python version: %PYTHON_VERSION%
-
-:: Map Python version to wheel version
-set "CP_VER="
-if "!PYTHON_VERSION!"=="3.9" set "CP_VER=cp39-cp39"
-if "!PYTHON_VERSION!"=="3.10" set "CP_VER=cp310-cp310"
-if "!PYTHON_VERSION!"=="3.11" set "CP_VER=cp311-cp311"
-if "!PYTHON_VERSION!"=="3.12" set "CP_VER=cp312-cp312"
-if "!PYTHON_VERSION!"=="3.13" set "CP_VER=cp313-cp313"
-
-:: Try to find architecture-appropriate wheel
-set "ARCH=win_amd64"
-if defined CP_VER (
-    set "WHEEL_PATH=%INSTALL_DIR%\wheels\!ARCH!\pyswisseph-2.10.3.2-!CP_VER!-!ARCH!.whl"
-    if exist "!WHEEL_PATH!" (
-        echo Found local wheel: !WHEEL_PATH!
-        python -m pip install "!WHEEL_PATH!" --no-deps
-        if %ERRORLEVEL% EQU 0 (
-            echo Successfully installed pyswisseph from local wheel.
-            goto setup_ephemeris
-        ) else (
-            echo Failed to install from local wheel.
-            echo Please check that the wheel file is not corrupted.
-            pause
-            exit /b 1
-        )
-    ) else (
-        echo No matching local wheel found for Python !PYTHON_VERSION! on !ARCH!
-        echo Expected wheel path: !WHEEL_PATH!
-        echo Please ensure the appropriate wheel is available for your system.
-        pause
-        exit /b 1
-    )
+set "ARCH="
+:: Check if running on ARM64
+wmic OS get OSArchitecture | findstr /i "ARM64" > nul
+if %ERRORLEVEL% EQU 0 (
+    set "ARCH=win_arm64"
 ) else (
-    echo Unsupported Python version: %PYTHON_VERSION%
-    echo Please install a supported Python version (3.9-3.13).
+    set "ARCH=win_amd64"
+)
+echo Detected architecture: !ARCH!
+
+:: Find the wheel for this architecture
+set "WHEEL_DIR=%INSTALL_DIR%\wheels\!ARCH!"
+if exist "!WHEEL_DIR!" (
+    :: Find any wheel file in the directory
+    for /f "delims=" %%W in ('dir /b "!WHEEL_DIR!\*.whl" 2^>nul') do (
+        set "WHEEL_PATH=!WHEEL_DIR!\%%W"
+        goto install_wheel
+    )
+    echo No wheel files found in !WHEEL_DIR!
+    pause
+    exit /b 1
+) else (
+    echo Wheel directory not found: !WHEEL_DIR!
+    pause
+    exit /b 1
+)
+
+:install_wheel
+echo Found wheel: !WHEEL_PATH!
+python -m pip install "!WHEEL_PATH!" --no-deps
+if %ERRORLEVEL% EQU 0 (
+    echo Successfully installed pyswisseph from local wheel.
+    goto setup_ephemeris
+) else (
+    echo Failed to install from local wheel.
+    echo Please check that the wheel file is not corrupted.
     pause
     exit /b 1
 )
