@@ -65,6 +65,7 @@ else
 fi
 
 # Delete the temporary files
+echo "Cleaning up temporary files..."
 rm "/tmp/KPAstrologyDashboard.zip"
 rm -rf "$TEMP_EXTRACT_DIR"
 

@@ -723,4 +723,13 @@ echo KP Astrology Dashboard has been installed to: %INSTALL_DIR%
 echo You can now run KP Astrology Dashboard from your desktop.
 echo.
 
+:: Clean up downloaded zip file
+echo Cleaning up downloaded zip file...
+if exist "%LOCAL_ZIP_FILE%" (
+    del "%LOCAL_ZIP_FILE%"
+    echo Deleted: %LOCAL_ZIP_FILE%
+) else (
+    echo No zip file found to clean up.
+)
+
 pause 
