@@ -512,9 +512,34 @@ echo Starting application...
 cd /d "{app_dir}"
 start "" "{app_dir}\\{exe_name}"
 
-echo Update completed successfully!
-:: Delete this batch file
+:: Check if application launched successfully by waiting briefly and checking if the process exists
 timeout /t 3 /nobreak > nul
+tasklist /fi "imagename eq {exe_name}" | find /i "{exe_name}" > nul
+if %ERRORLEVEL% EQU 0 (
+    echo Updated Successfully. Press any key to continue...
+    pause > nul
+) else (
+    echo Application failed to start. Restoring from backup...
+    if exist "{temp_dir}\\kp_dashboard_backup" (
+        xcopy /E /I /Y "{temp_dir}\\kp_dashboard_backup" "{app_dir}"
+        echo Application has been restored from backup.
+    )
+    pause
+)
+
+echo Cleaning up temporary files...
+:: Delete backup and temporary files
+if exist "{temp_dir}\\kp_dashboard_backup" (
+    rmdir /S /Q "{temp_dir}\\kp_dashboard_backup"
+)
+if exist "{temp_dir}\\config_backup.json" (
+    del "{temp_dir}\\config_backup.json"
+)
+if exist "{temp_dir}\\config_merged.json" (
+    del "{temp_dir}\\config_merged.json"
+)
+
+:: Delete this batch file
 del "%~f0"
 exit /b 0
 
@@ -650,8 +675,38 @@ rm "{download_path}"
 
 echo "Starting application..."
 {start_cmd} &
+APP_PID=$!
 
-echo "Update completed successfully!"
+# Wait briefly for application to start
+sleep 3
+
+# Check if application is running
+if ps -p $APP_PID > /dev/null; then
+    echo "Updated Successfully. Press any key to continue..."
+    read -n 1 -s
+else
+    echo "Application failed to start. Restoring from backup..."
+    # Restore from backup if available
+    if [ -d "{temp_dir}/kp_dashboard_backup" ]; then
+        cp -R "{temp_dir}/kp_dashboard_backup/"* "{app_dir}/"
+        echo "Application has been restored from backup."
+    fi
+    read -p "Press any key to continue..." -n 1 -s
+fi
+
+echo "Cleaning up temporary files..."
+# Delete backup and temporary files
+if [ -d "{temp_dir}/kp_dashboard_backup" ]; then
+    rm -rf "{temp_dir}/kp_dashboard_backup"
+fi
+if [ -f "{temp_dir}/config_backup.json" ]; then
+    rm "{temp_dir}/config_backup.json"
+fi
+if [ -f "{temp_dir}/config_merged.json" ]; then
+    rm "{temp_dir}/config_merged.json"
+fi
+
+# Delete this script
 rm "$0"
 """)
         
