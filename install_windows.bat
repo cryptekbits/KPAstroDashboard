@@ -551,8 +551,12 @@ echo     sys.exit(0 if success else 1) >> "%TEST_SCRIPT%"
 :: Run the test script
 echo.
 echo Running Swiss Ephemeris test...
-%PYTHON_CMD% "%TEST_SCRIPT%"
+%PYTHON_CMD% "%TEST_SCRIPT%" > "%TEMP%\swisseph_test_result.txt" 2>&1
 set SWISSEPH_TEST_RESULT=%ERRORLEVEL%
+
+:: Display the output but don't interpret it
+type "%TEMP%\swisseph_test_result.txt"
+del "%TEMP%\swisseph_test_result.txt"
 
 :: Only proceed with system-wide setup if the test failed
 if %SWISSEPH_TEST_RESULT% NEQ 0 (
@@ -635,8 +639,12 @@ if %SWISSEPH_TEST_RESULT% NEQ 0 (
     :: Run the test script again to verify
     echo.
     echo Running Swiss Ephemeris test again after system-wide setup...
-    %PYTHON_CMD% "%TEST_SCRIPT%"
+    %PYTHON_CMD% "%TEST_SCRIPT%" > "%TEMP%\swisseph_retest_result.txt" 2>&1
     set RETEST_RESULT=%ERRORLEVEL%
+    
+    :: Display the output but don't interpret it
+    type "%TEMP%\swisseph_retest_result.txt"
+    del "%TEMP%\swisseph_retest_result.txt"
     
     if !RETEST_RESULT! EQU 0 (
         echo Swiss Ephemeris now working correctly!
@@ -648,7 +656,9 @@ if %SWISSEPH_TEST_RESULT% NEQ 0 (
 )
 
 :: Clean up the test script
-del "%TEST_SCRIPT%"
+if exist "%TEST_SCRIPT%" (
+    del "%TEST_SCRIPT%"
+)
 
 :skip_ephemeris
 
