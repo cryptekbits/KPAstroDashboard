@@ -510,81 +510,65 @@ if "!MISSING_FILES!"=="false" (
     echo All required ephemeris files are present in the application directory.
 )
 
-:: Create a quick Python test script to verify Swiss Ephemeris functionality
+:: Check if system-wide Swiss Ephemeris directory exists
 echo.
-echo Creating Swiss Ephemeris test script...
-set TEST_SCRIPT=%INSTALL_DIR%\test_swisseph.py
-
-:: Create the test script
-echo import os > "%TEST_SCRIPT%"
-echo import sys >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo def test_swisseph_functionality(): >> "%TEST_SCRIPT%"
-echo     """Test if Swiss Ephemeris works correctly""" >> "%TEST_SCRIPT%"
-echo     try: >> "%TEST_SCRIPT%"
-echo         import swisseph >> "%TEST_SCRIPT%"
-echo         import flatlib >> "%TEST_SCRIPT%"
-echo         from flatlib.ephem import setPath >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo         # Use only built-in path for swefiles >> "%TEST_SCRIPT%"
-echo         app_dir = os.path.dirname(os.path.abspath(__file__)) >> "%TEST_SCRIPT%"
-echo         swefiles_path = os.path.join(app_dir, 'flatlib', 'resources', 'swefiles') >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo         # Normalize path for Windows >> "%TEST_SCRIPT%"
-echo         normalized_path = swefiles_path.replace('\\', '/') >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo         # Set path >> "%TEST_SCRIPT%"
-echo         setPath(normalized_path) >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo         # Test calculation >> "%TEST_SCRIPT%"
-echo         test_jd = 2459000.5  # A random Julian date >> "%TEST_SCRIPT%"
-echo         test_result = swisseph.calc_ut(test_jd, 0, 2)  # Calculate Sun position >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo         print(f"SwissEph test successful: {test_result}") >> "%TEST_SCRIPT%"
-echo         return True >> "%TEST_SCRIPT%"
-echo     except Exception as e: >> "%TEST_SCRIPT%"
-echo         print(f"SwissEph test failed: {str(e)}") >> "%TEST_SCRIPT%"
-echo         return False >> "%TEST_SCRIPT%"
-echo. >> "%TEST_SCRIPT%"
-echo if __name__ == "__main__": >> "%TEST_SCRIPT%"
-echo     success = test_swisseph_functionality() >> "%TEST_SCRIPT%"
-echo     sys.exit(0 if success else 1) >> "%TEST_SCRIPT%"
-
-:: Run the test script
-echo.
-echo Running Swiss Ephemeris test...
-%PYTHON_CMD% "%TEST_SCRIPT%" > "%TEMP%\swisseph_test_result.txt" 2>&1
-set SWISSEPH_TEST_RESULT=%ERRORLEVEL%
-
-:: Display the output but don't interpret it
-type "%TEMP%\swisseph_test_result.txt"
-del "%TEMP%\swisseph_test_result.txt"
-
-:: Only proceed with system-wide setup if the test failed
-if %SWISSEPH_TEST_RESULT% NEQ 0 (
-    echo.
-    echo Swiss Ephemeris test failed. Checking system-wide configuration...
+echo Checking system-wide Swiss Ephemeris configuration...
+if not exist "%SYSTEM_SWEFILES_DIR%" (
+    echo System-wide Swiss Ephemeris directory not found.
+    echo Would you like to create it and copy the ephemeris files? (Y/N)
+    echo This will require administrator privileges.
+    set /p SYSTEM_CHOICE=Your choice: 
     
-    :: Check if system-wide Swiss Ephemeris directory exists
-    if not exist "%SYSTEM_SWEFILES_DIR%" (
-        echo System-wide Swiss Ephemeris directory not found.
-        echo Would you like to create it and copy the ephemeris files? (Y/N)
-        echo This will require administrator privileges.
-        set /p SYSTEM_CHOICE=Your choice: 
+    if /i "!SYSTEM_CHOICE!"=="Y" (
+        :: Create a temporary admin script
+        echo @echo off > "%TEMP%\sweadmin.bat"
+        echo echo Creating system-wide Swiss Ephemeris directory... >> "%TEMP%\sweadmin.bat"
+        echo if not exist "%SYSTEM_SWEFILES_DIR%" mkdir "%SYSTEM_SWEFILES_DIR%" >> "%TEMP%\sweadmin.bat"
+        echo echo Copying ephemeris files... >> "%TEMP%\sweadmin.bat"
         
-        if /i "!SYSTEM_CHOICE!"=="Y" (
+        for %%F in (%REQUIRED_FILES%) do (
+            echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
+        )
+        
+        echo echo. >> "%TEMP%\sweadmin.bat"
+        echo echo System-wide Swiss Ephemeris files setup complete. >> "%TEMP%\sweadmin.bat"
+        
+        :: Run the script with admin privileges
+        echo Requesting administrator privileges...
+        powershell -Command "Start-Process -FilePath '%TEMP%\sweadmin.bat' -Verb RunAs -Wait"
+        
+        :: Clean up
+        del "%TEMP%\sweadmin.bat"
+    ) else (
+        echo Skipping system-wide Swiss Ephemeris setup.
+    )
+) else (
+    :: Check if files exist in the system directory
+    set "SYSTEM_MISSING_FILES=false"
+    for %%F in (%REQUIRED_FILES%) do (
+        if not exist "%SYSTEM_SWEFILES_DIR%\%%F" (
+            set "SYSTEM_MISSING_FILES=true"
+            goto check_missing_done
+        )
+    )
+    
+    :check_missing_done
+    if "!SYSTEM_MISSING_FILES!"=="true" (
+        echo System-wide Swiss Ephemeris directory exists but some files are missing.
+        echo Would you like to update the ephemeris files? (Y/N)
+        set /p UPDATE_CHOICE=Your choice: 
+        
+        if /i "!UPDATE_CHOICE!"=="Y" (
             :: Create a temporary admin script
             echo @echo off > "%TEMP%\sweadmin.bat"
-            echo echo Creating system-wide Swiss Ephemeris directory... >> "%TEMP%\sweadmin.bat"
-            echo if not exist "%SYSTEM_SWEFILES_DIR%" mkdir "%SYSTEM_SWEFILES_DIR%" >> "%TEMP%\sweadmin.bat"
-            echo echo Copying ephemeris files... >> "%TEMP%\sweadmin.bat"
+            echo echo Updating system-wide Swiss Ephemeris files... >> "%TEMP%\sweadmin.bat"
             
             for %%F in (%REQUIRED_FILES%) do (
                 echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
             )
             
             echo echo. >> "%TEMP%\sweadmin.bat"
-            echo echo System-wide Swiss Ephemeris files setup complete. >> "%TEMP%\sweadmin.bat"
+            echo echo System-wide Swiss Ephemeris files update complete. >> "%TEMP%\sweadmin.bat"
             
             :: Run the script with admin privileges
             echo Requesting administrator privileges...
@@ -593,73 +577,12 @@ if %SWISSEPH_TEST_RESULT% NEQ 0 (
             :: Clean up
             del "%TEMP%\sweadmin.bat"
         ) else (
-            echo Skipping system-wide Swiss Ephemeris setup.
+            echo Skipping system-wide Swiss Ephemeris update.
         )
     ) else (
-        :: Check if files exist in the system directory
-        set "SYSTEM_MISSING_FILES=false"
-        for %%F in (%REQUIRED_FILES%) do (
-            if not exist "%SYSTEM_SWEFILES_DIR%\%%F" (
-                set "SYSTEM_MISSING_FILES=true"
-                goto check_missing_done
-            )
-        )
-        
-        :check_missing_done
-        if "!SYSTEM_MISSING_FILES!"=="true" (
-            echo System-wide Swiss Ephemeris directory exists but some files are missing.
-            echo Would you like to update the ephemeris files? (Y/N)
-            set /p UPDATE_CHOICE=Your choice: 
-            
-            if /i "!UPDATE_CHOICE!"=="Y" (
-                :: Create a temporary admin script
-                echo @echo off > "%TEMP%\sweadmin.bat"
-                echo echo Updating system-wide Swiss Ephemeris files... >> "%TEMP%\sweadmin.bat"
-                
-                for %%F in (%REQUIRED_FILES%) do (
-                    echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
-                )
-                
-                echo echo. >> "%TEMP%\sweadmin.bat"
-                echo echo System-wide Swiss Ephemeris files update complete. >> "%TEMP%\sweadmin.bat"
-                
-                :: Run the script with admin privileges
-                echo Requesting administrator privileges...
-                powershell -Command "Start-Process -FilePath '%TEMP%\sweadmin.bat' -Verb RunAs -Wait"
-                
-                :: Clean up
-                del "%TEMP%\sweadmin.bat"
-            ) else (
-                echo Skipping system-wide Swiss Ephemeris update.
-            )
-        ) else (
-            echo System-wide Swiss Ephemeris directory exists with all required files.
-            echo No actions needed.
-        )
+        echo System-wide Swiss Ephemeris directory exists with all required files.
+        echo No actions needed.
     )
-    
-    :: Run the test script again to verify
-    echo.
-    echo Running Swiss Ephemeris test again after system-wide setup...
-    %PYTHON_CMD% "%TEST_SCRIPT%" > "%TEMP%\swisseph_retest_result.txt" 2>&1
-    set RETEST_RESULT=%ERRORLEVEL%
-    
-    :: Display the output but don't interpret it
-    type "%TEMP%\swisseph_retest_result.txt"
-    del "%TEMP%\swisseph_retest_result.txt"
-    
-    if !RETEST_RESULT! EQU 0 (
-        echo Swiss Ephemeris now working correctly!
-    ) else (
-        echo Warning: Swiss Ephemeris still not working correctly. You may encounter issues with the application.
-    )
-) else (
-    echo Swiss Ephemeris test successful! No system-wide setup needed.
-)
-
-:: Clean up the test script
-if exist "%TEST_SCRIPT%" (
-    del "%TEST_SCRIPT%"
 )
 
 :skip_ephemeris

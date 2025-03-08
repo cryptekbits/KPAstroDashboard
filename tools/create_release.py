@@ -190,7 +190,7 @@ def get_release_notes():
         return "Release notes generation failed. Please check the commit history."
 
 
-def wait_for_workflow_completion(version, timeout=1800):
+def wait_for_workflow_completion(version, timeout=6000):
     """Wait for the GitHub Actions workflow to complete"""
     # This requires the GitHub CLI to be installed and authenticated
     root_dir = Path(__file__).parent.parent
@@ -230,7 +230,7 @@ def wait_for_workflow_completion(version, timeout=1800):
             # Wait for the workflow to start
             start_time = time.time()
             while time.time() - start_time < timeout:
-                time.sleep(10)
+                time.sleep(30)
                 result = subprocess.run(
                     ["gh", "run", "list", "--repo", repo_info, "--json", "status,name,headBranch,databaseId,conclusion"],
                     cwd=root_dir,
