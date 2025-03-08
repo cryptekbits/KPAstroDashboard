@@ -6,8 +6,8 @@ import os
 from datetime import datetime
 
 # Default version information
-VERSION = "1.5.7"
-VERSION_NAME = "AstroInsight-1.5.7-BugFix"
+VERSION = "1.5.8"
+VERSION_NAME = "AstroInsight-1.5.8-BugFix"
 BUILD_DATE = "2025-03-08"
 
 # Check for environment variables that might override the version
