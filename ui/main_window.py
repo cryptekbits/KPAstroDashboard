@@ -15,6 +15,7 @@ from exporters.excel_exporter import ExcelExporter
 from .generator_thread import GeneratorThread
 from .tabs.main_tab import MainTab
 from .tabs.config_tab import ConfigTab
+from .tabs.info_tab import InfoTab
 from .utils.ui_helpers import is_file_open, open_excel_file
 from .utils.updater import check_for_updates_on_startup
 
@@ -30,6 +31,7 @@ class KPAstrologyApp(QMainWindow):
         # Create tabs and components
         self.main_tab = MainTab(self)
         self.config_tab = ConfigTab(self)
+        self.info_tab = InfoTab(self)
         
         # Initialize thread
         self.generator_thread = None
@@ -60,6 +62,10 @@ class KPAstrologyApp(QMainWindow):
         # Create and add the configuration tab
         config_tab = self.config_tab.setup_tab()
         tab_widget.addTab(config_tab, "Configuration")
+        
+        # Create and add the info tab
+        info_tab = self.info_tab.setup_tab()
+        tab_widget.addTab(info_tab, "Info")
 
         # Create menu bar
         self.create_menu_bar()

@@ -188,9 +188,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Setup Swiss Ephemeris files
+# Setup Swiss Ephemeris files - use test script to check if they work correctly first
 echo
-echo "Setting up Swiss Ephemeris files..."
+echo "Testing Swiss Ephemeris functionality..."
 SWEFILES_DIR="$INSTALL_DIR/flatlib/resources/swefiles"
 SYSTEM_SWEFILES_DIR="/usr/local/share/sweph/ephe"
 
@@ -227,77 +227,157 @@ else
     echo "All required ephemeris files are present in the application directory."
 fi
 
-# Check if system-wide Swiss Ephemeris directory exists
-echo
-echo "Checking for system-wide Swiss Ephemeris directory..."
-if [ ! -d "$SYSTEM_SWEFILES_DIR" ]; then
-    echo "System-wide Swiss Ephemeris directory not found."
-    echo "Would you like to create it and copy the ephemeris files? (Y/N)"
-    echo "This will require administrator privileges."
-    read -p "Your choice: " SYSTEM_CHOICE
+# Create a quick Python test script to verify Swiss Ephemeris functionality
+cat > "$INSTALL_DIR/test_swisseph.py" << 'EOL'
+import os
+import sys
+
+def test_swisseph_functionality():
+    """Test if Swiss Ephemeris works correctly"""
+    try:
+        import swisseph
+        import flatlib
+        from flatlib.ephem import setPath
+        
+        # Use only built-in path for swefiles
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        swefiles_path = os.path.join(app_dir, 'flatlib', 'resources', 'swefiles')
+        
+        # Normalize path for Windows
+        normalized_path = swefiles_path.replace('\\', '/')
+        
+        # Set path
+        setPath(normalized_path)
+        
+        # Test calculation
+        test_jd = 2459000.5  # A random Julian date
+        test_result = swisseph.calc_ut(test_jd, 0, 2)  # Calculate Sun position
+        
+        print(f"SwissEph test successful: {test_result}")
+        return True
+    except Exception as e:
+        print(f"SwissEph test failed: {str(e)}")
+        return False
+
+if __name__ == "__main__":
+    success = test_swisseph_functionality()
+    sys.exit(0 if success else 1)
+EOL
+
+# Make test script executable
+chmod +x "$INSTALL_DIR/test_swisseph.py"
+
+# Run the test script
+echo "Running Swiss Ephemeris test..."
+python3 "$INSTALL_DIR/test_swisseph.py"
+SWISSEPH_TEST_RESULT=$?
+
+# Only proceed with system-wide setup if the test failed
+if [ $SWISSEPH_TEST_RESULT -ne 0 ]; then
+    echo
+    echo "Swiss Ephemeris test failed. Checking system-wide configuration..."
     
-    if [[ "$SYSTEM_CHOICE" =~ ^[Yy]$ ]]; then
-        # Create a temporary script for admin privileges
-        ADMIN_SCRIPT="/tmp/sweadmin.sh"
+    # Check if system-wide Swiss Ephemeris directory exists
+    if [ ! -d "$SYSTEM_SWEFILES_DIR" ]; then
+        echo "System-wide Swiss Ephemeris directory not found."
+        echo "Would you like to create it and copy the ephemeris files? (Y/N)"
+        echo "This will require administrator privileges."
+        read -p "Your choice: " SYSTEM_CHOICE
         
-        echo "#!/bin/bash" > "$ADMIN_SCRIPT"
-        echo "echo Creating system-wide Swiss Ephemeris directory..." >> "$ADMIN_SCRIPT"
-        echo "mkdir -p \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
-        echo "echo Copying ephemeris files..." >> "$ADMIN_SCRIPT"
-        
+        if [[ "$SYSTEM_CHOICE" =~ ^[Yy]$ ]]; then
+            # Create a temporary script for admin privileges
+            ADMIN_SCRIPT="/tmp/sweadmin.sh"
+            
+            echo "#!/bin/bash" > "$ADMIN_SCRIPT"
+            echo "echo Creating system-wide Swiss Ephemeris directory..." >> "$ADMIN_SCRIPT"
+            echo "mkdir -p \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
+            echo "echo Copying ephemeris files..." >> "$ADMIN_SCRIPT"
+            
+            for file in "${REQUIRED_FILES[@]}"; do
+                echo "if [ -f \"$SWEFILES_DIR/$file\" ]; then cp \"$SWEFILES_DIR/$file\" \"$SYSTEM_SWEFILES_DIR/$file\"; fi" >> "$ADMIN_SCRIPT"
+            done
+            
+            echo "echo" >> "$ADMIN_SCRIPT"
+            echo "echo System-wide Swiss Ephemeris files setup complete." >> "$ADMIN_SCRIPT"
+            echo "chmod -R 755 \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
+            
+            # Make the script executable
+            chmod +x "$ADMIN_SCRIPT"
+            
+            # Run with sudo
+            echo "Requesting administrator privileges..."
+            sudo "$ADMIN_SCRIPT"
+            
+            # Clean up
+            rm "$ADMIN_SCRIPT"
+        else
+            echo "Skipping system-wide Swiss Ephemeris setup."
+        fi
+    else
+        # Check if files exist in the system directory
+        SYSTEM_MISSING_FILES=false
         for file in "${REQUIRED_FILES[@]}"; do
-            echo "if [ -f \"$SWEFILES_DIR/$file\" ]; then cp \"$SWEFILES_DIR/$file\" \"$SYSTEM_SWEFILES_DIR/$file\"; fi" >> "$ADMIN_SCRIPT"
+            if [ ! -f "$SYSTEM_SWEFILES_DIR/$file" ]; then
+                SYSTEM_MISSING_FILES=true
+                break
+            fi
         done
         
-        echo "echo" >> "$ADMIN_SCRIPT"
-        echo "echo System-wide Swiss Ephemeris files setup complete." >> "$ADMIN_SCRIPT"
-        echo "chmod -R 755 \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
-        
-        # Make the script executable
-        chmod +x "$ADMIN_SCRIPT"
-        
-        # Run with sudo
-        echo "Requesting administrator privileges..."
-        sudo "$ADMIN_SCRIPT"
-        
-        # Clean up
-        rm "$ADMIN_SCRIPT"
+        if [ "$SYSTEM_MISSING_FILES" = true ]; then
+            echo "System-wide Swiss Ephemeris directory exists but some files are missing."
+            echo "Would you like to update the ephemeris files? (Y/N)"
+            read -p "Your choice: " UPDATE_CHOICE
+            
+            if [[ "$UPDATE_CHOICE" =~ ^[Yy]$ ]]; then
+                # Create a temporary script for admin privileges
+                ADMIN_SCRIPT="/tmp/sweadmin.sh"
+                
+                echo "#!/bin/bash" > "$ADMIN_SCRIPT"
+                echo "echo Updating system-wide Swiss Ephemeris files..." >> "$ADMIN_SCRIPT"
+                
+                for file in "${REQUIRED_FILES[@]}"; do
+                    echo "if [ -f \"$SWEFILES_DIR/$file\" ]; then cp \"$SWEFILES_DIR/$file\" \"$SYSTEM_SWEFILES_DIR/$file\"; fi" >> "$ADMIN_SCRIPT"
+                done
+                
+                echo "echo" >> "$ADMIN_SCRIPT"
+                echo "echo System-wide Swiss Ephemeris files update complete." >> "$ADMIN_SCRIPT"
+                echo "chmod -R 755 \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
+                
+                # Make the script executable
+                chmod +x "$ADMIN_SCRIPT"
+                
+                # Run with sudo
+                echo "Requesting administrator privileges..."
+                sudo "$ADMIN_SCRIPT"
+                
+                # Clean up
+                rm "$ADMIN_SCRIPT"
+            else
+                echo "Skipping system-wide Swiss Ephemeris update."
+            fi
+        else
+            echo "System-wide Swiss Ephemeris directory exists with all required files."
+            echo "No actions needed."
+        fi
+    fi
+    
+    # Run the test script again to verify
+    echo
+    echo "Running Swiss Ephemeris test again after system-wide setup..."
+    python3 "$INSTALL_DIR/test_swisseph.py"
+    RETEST_RESULT=$?
+    
+    if [ $RETEST_RESULT -eq 0 ]; then
+        echo "Swiss Ephemeris now working correctly!"
     else
-        echo "Skipping system-wide Swiss Ephemeris setup."
+        echo "Warning: Swiss Ephemeris still not working correctly. You may encounter issues with the application."
     fi
 else
-    echo "System-wide Swiss Ephemeris directory already exists."
-    echo "Would you like to update the ephemeris files? (Y/N)"
-    read -p "Your choice: " UPDATE_CHOICE
-    
-    if [[ "$UPDATE_CHOICE" =~ ^[Yy]$ ]]; then
-        # Create a temporary script for admin privileges
-        ADMIN_SCRIPT="/tmp/sweadmin.sh"
-        
-        echo "#!/bin/bash" > "$ADMIN_SCRIPT"
-        echo "echo Updating system-wide Swiss Ephemeris files..." >> "$ADMIN_SCRIPT"
-        
-        for file in "${REQUIRED_FILES[@]}"; do
-            echo "if [ -f \"$SWEFILES_DIR/$file\" ]; then cp \"$SWEFILES_DIR/$file\" \"$SYSTEM_SWEFILES_DIR/$file\"; fi" >> "$ADMIN_SCRIPT"
-        done
-        
-        echo "echo" >> "$ADMIN_SCRIPT"
-        echo "echo System-wide Swiss Ephemeris files update complete." >> "$ADMIN_SCRIPT"
-        echo "chmod -R 755 \"$SYSTEM_SWEFILES_DIR\"" >> "$ADMIN_SCRIPT"
-        
-        # Make the script executable
-        chmod +x "$ADMIN_SCRIPT"
-        
-        # Run with sudo
-        echo "Requesting administrator privileges..."
-        sudo "$ADMIN_SCRIPT"
-        
-        # Clean up
-        rm "$ADMIN_SCRIPT"
-    else
-        echo "Skipping system-wide Swiss Ephemeris update."
-    fi
+    echo "Swiss Ephemeris test successful! No system-wide setup needed."
 fi
+
+# Clean up the test script
+rm "$INSTALL_DIR/test_swisseph.py"
 
 # Create desktop shortcut with icon
 echo

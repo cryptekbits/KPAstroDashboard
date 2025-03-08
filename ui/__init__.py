@@ -7,7 +7,7 @@ from .main_window import KPAstrologyApp
 from .generator_thread import GeneratorThread
 from .utils.ui_helpers import is_file_open, open_excel_file
 from .utils.logging_utils import setup_logging
-from .tabs import MainTab, ConfigTab
+from .tabs import MainTab, ConfigTab, InfoTab
 from .components import YogaControls, AspectControls
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     'setup_logging',
     'MainTab',
     'ConfigTab',
+    'InfoTab',
     'YogaControls',
     'AspectControls'
 ] 
