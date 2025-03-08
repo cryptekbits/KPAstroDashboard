@@ -62,6 +62,9 @@ class InfoTab:
         # License information
         self.add_license_section(info_layout)
         
+        # Thanks section
+        self.add_thanks_section(info_layout)
+        
         return info_tab
     
     def add_logo_section(self, layout):
@@ -171,4 +174,44 @@ class InfoTab:
         license_label.setAlignment(Qt.AlignCenter)
         license_layout.addWidget(license_label)
         
-        layout.addWidget(license_group) 
+        layout.addWidget(license_group)
+    
+    def add_thanks_section(self, layout):
+        """Add thanks section to acknowledge contributors."""
+        thanks_group = QGroupBox("Acknowledgements")
+        thanks_layout = QVBoxLayout()
+        thanks_group.setLayout(thanks_layout)
+        
+        # Introduction text
+        intro_text = "Special thanks to the following contributors:"
+        intro_label = QLabel(intro_text)
+        intro_label.setAlignment(Qt.AlignCenter)
+        thanks_layout.addWidget(intro_label)
+        
+        # Create grid layout for contributors
+        contributors_layout = QGridLayout()
+        
+        # Dilip Rajkumar
+        contributors_layout.addWidget(QLabel("Dilip Rajkumar:"), 0, 0)
+        dilip_label = QLabel("<a href='https://github.com/diliprk'>github/diliprk</a> for repo " +
+                            "<a href='https://github.com/diliprk/VedicAstro'>github/diliprk/VedicAstro</a> and inspiration")
+        dilip_label.setOpenExternalLinks(True)
+        contributors_layout.addWidget(dilip_label, 0, 1)
+        
+        # infinityInZero
+        contributors_layout.addWidget(QLabel("infinityInZero:"), 1, 0)
+        infinity_label = QLabel("<a href='https://github.com/infinityInZero'>github/infinityInZero</a> " +
+                               "for contributions to the flatlib repo for sidereal calculations")
+        infinity_label.setOpenExternalLinks(True)
+        contributors_layout.addWidget(infinity_label, 1, 1)
+        
+        # Stanislas Marquis
+        contributors_layout.addWidget(QLabel("Stanislas Marquis:"), 2, 0)
+        stanislas_label = QLabel("<a href='https://github.com/astrorigin'>github/astrorigin</a> " +
+                                "for porting swisseph to Python " +
+                                "<a href='https://github.com/astrorigin/pyswisseph'>github/astrorigin/pyswisseph</a>")
+        stanislas_label.setOpenExternalLinks(True)
+        contributors_layout.addWidget(stanislas_label, 2, 1)
+        
+        thanks_layout.addLayout(contributors_layout)
+        layout.addWidget(thanks_group) 
