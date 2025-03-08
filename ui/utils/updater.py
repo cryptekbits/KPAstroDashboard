@@ -382,93 +382,163 @@ class UpdateDownloader(QObject):
             python_cmd = "python"
         else:
             exe_name = "main.py"
+            python_cmd = "python"
         
         # Create batch file for the update process
         updater_path = os.path.join(temp_dir, "kp_dashboard_updater.bat")
         
+        # Parse the version from the download path
+        import re
+        version_match = re.search(r'v(\d+\.\d+\.\d+)', download_path)
+        version = version_match.group(1) if version_match else "unknown"
+        
+        # Calculate the GitHub extracted folder name (usually includes the version)
+        extract_folder_name = f"KPAstroDashboard-{version}"
+        source_folder = os.path.join(extract_dir, "extracted", extract_folder_name)
+        
         with open(updater_path, 'w') as file:
             file.write(f"""@echo off
 echo Waiting for application to close...
-timeout /t 2 /nobreak > nul
+:: Wait for the application to close completely
+timeout /t 3 /nobreak > nul
+
+:: Get process ID of the script to prevent killing itself
+for /f "tokens=2" %%a in ('tasklist /nh /fi "imagename eq {exe_name}" ^| find /i "{exe_name}"') do (
+    set PID=%%a
+    echo Found application process with PID: %%a
+    taskkill /F /PID %%a
+)
 
 echo Extracting update...
+:: Create clean extraction directories
 if exist "{extract_dir}" rmdir /S /Q "{extract_dir}"
-powershell -command "Expand-Archive -Path '{download_path}' -DestinationPath '{extract_dir}' -Force"
+mkdir "{extract_dir}"
+mkdir "{extract_dir}\\extracted"
+
+:: Extract the update using PowerShell 
+powershell -command "Expand-Archive -Path '{download_path}' -DestinationPath '{extract_dir}\\extracted' -Force"
 
 echo Backing up user config...
-copy "{app_dir}\\config.json" "{temp_dir}\\config_backup.json"
+:: Backup the current config file
+if exist "{app_dir}\\config.json" (
+    copy "{app_dir}\\config.json" "{temp_dir}\\config_backup.json"
+)
+
+echo Checking extract directory structure...
+:: Check if the extraction was successful
+if not exist "{source_folder}" (
+    echo Error: Extracted folder not found at {source_folder}
+    dir "{extract_dir}\\extracted"
+    goto ERROR
+)
 
 echo Merging configurations...
+:: Merge configurations using PowerShell
 powershell -Command "
 try {{
-    # Load current config
-    $currentConfig = Get-Content '{app_dir}\\config.json' | ConvertFrom-Json
-    
-    # Load new config
-    $newConfig = Get-Content '{extract_dir}\\config.json' | ConvertFrom-Json
-    
-    # Create a function to merge objects recursively
-    function Merge-Objects($current, $new) {{
-        $merged = $current.PSObject.Copy()
-        foreach ($property in $new.PSObject.Properties) {{
-            $propertyName = $property.Name
-            if (-not ($merged.PSObject.Properties.Name -contains $propertyName)) {{
-                # Add new fields from the new config
-                $merged | Add-Member -MemberType NoteProperty -Name $propertyName -Value $property.Value
-            }} elseif ($merged.$propertyName -is [PSCustomObject] -and $property.Value -is [PSCustomObject]) {{
-                # Recursively merge nested objects
-                $merged.$propertyName = Merge-Objects $merged.$propertyName $property.Value
+    # Check if both config files exist
+    if ((Test-Path '{app_dir}\\config.json') -and (Test-Path '{source_folder}\\config.json')) {{
+        # Load current config
+        $currentConfig = Get-Content '{app_dir}\\config.json' | ConvertFrom-Json
+        
+        # Load new config
+        $newConfig = Get-Content '{source_folder}\\config.json' | ConvertFrom-Json
+        
+        # Create a function to merge objects recursively
+        function Merge-Objects($current, $new) {{
+            $merged = $current.PSObject.Copy()
+            foreach ($property in $new.PSObject.Properties) {{
+                $propertyName = $property.Name
+                if (-not ($merged.PSObject.Properties.Name -contains $propertyName)) {{
+                    # Add new fields from the new config
+                    $merged | Add-Member -MemberType NoteProperty -Name $propertyName -Value $property.Value
+                }} elseif ($merged.$propertyName -is [PSCustomObject] -and $property.Value -is [PSCustomObject]) {{
+                    # Recursively merge nested objects
+                    $merged.$propertyName = Merge-Objects $merged.$propertyName $property.Value
+                }}
+                # Keep existing values for existing fields
             }}
-            # Keep existing values for existing fields
+            return $merged
         }}
-        return $merged
+        
+        # Merge the configs
+        $mergedConfig = Merge-Objects $currentConfig $newConfig
+        
+        # Save merged config to the backup location
+        $mergedConfig | ConvertTo-Json -Depth 100 | Set-Content '{temp_dir}\\config_merged.json'
+        Write-Host 'Config files merged successfully'
+    }} else {{
+        Write-Host 'One or both config files not found - skipping merge'
+        if (Test-Path '{app_dir}\\config.json') {{
+            Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+        }}
     }}
-    
-    # Merge the configs
-    $mergedConfig = Merge-Objects $currentConfig $newConfig
-    
-    # Save merged config to the backup location
-    $mergedConfig | ConvertTo-Json -Depth 100 | Set-Content '{temp_dir}\\config_merged.json'
-    Write-Host 'Config files merged successfully'
 }} catch {{
     Write-Host 'Error merging config files: $_'
     Write-Host 'Keeping original config file'
-    Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+    if (Test-Path '{app_dir}\\config.json') {{
+        Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+    }}
 }}"
 
 echo Checking for new requirements...
-if exist "{extract_dir}\\requirements.txt" (
-    powershell -Command "(Get-Content '{extract_dir}\\requirements.txt') -replace '; platform_system==\"Windows\"', '' -replace '; platform_system==\"Darwin\"', '' | Set-Content '{extract_dir}\\requirements_clean.txt'"
-    
+if exist "{source_folder}\\requirements.txt" (
     echo Installing any new requirements...
-    cd /d "{extract_dir}"
-    python -m pip install -r requirements_clean.txt --upgrade
+    cd /d "{source_folder}"
+    {python_cmd} -m pip install -r requirements.txt --upgrade
 )
 
-echo Updating application files...
+echo Creating backup of current application...
 :: First, back up the entire app directory
 xcopy /E /I /Y "{app_dir}" "{temp_dir}\\kp_dashboard_backup"
 
-:: Now copy the new files
-xcopy /E /I /Y "{extract_dir}\\*" "{app_dir}"
+echo Updating application files...
+:: Now copy the new files from the correct source folder
+xcopy /E /I /Y "{source_folder}\\*" "{app_dir}"
 
+echo Restoring configuration...
 :: Restore the merged config
-copy "{temp_dir}\\config_merged.json" "{app_dir}\\config.json"
+if exist "{temp_dir}\\config_merged.json" (
+    copy "{temp_dir}\\config_merged.json" "{app_dir}\\config.json"
+)
 
 echo Cleaning up...
+:: Delete temporary files
 rmdir /S /Q "{extract_dir}"
 del "{download_path}"
 
 echo Starting application...
-cd "{app_dir}"
-start "" "{os.path.join(app_dir, exe_name)}"
+:: Start the updated application
+cd /d "{app_dir}"
+start "" "{app_dir}\\{exe_name}"
 
 echo Update completed successfully!
+:: Delete this batch file
+timeout /t 3 /nobreak > nul
 del "%~f0"
+exit /b 0
+
+:ERROR
+echo Update failed. Restoring from backup...
+if exist "{temp_dir}\\kp_dashboard_backup" (
+    xcopy /E /I /Y "{temp_dir}\\kp_dashboard_backup" "{app_dir}"
+)
+echo Application has been restored from backup.
+pause
+exit /b 1
 """)
         
-        # Run the updater
-        subprocess.Popen(["cmd", "/c", updater_path], creationflags=subprocess.CREATE_NO_WINDOW)
+        # We need to use shell=True for Windows to properly run the batch file
+        try:
+            if platform.system() == "Windows":
+                # Use CREATE_NO_WINDOW flag to hide the console window
+                subprocess.Popen(["cmd", "/c", updater_path], creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                # Fallback for testing on non-Windows systems
+                subprocess.Popen(["cmd", "/c", updater_path])
+        except Exception as e:
+            self.logger.error(f"Error executing update script: {str(e)}")
+            raise
         
         # Exit the application
         sys.exit(0)
