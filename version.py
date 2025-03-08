@@ -6,9 +6,9 @@ import os
 from datetime import datetime
 
 # Default version information
-VERSION = "1.9.0"
-VERSION_NAME = "AstroInsight-1.9.0-Stable"
-BUILD_DATE = "2025-03-08"
+VERSION = "2.0.0"
+VERSION_NAME = "AI 2.0.0-Stable Release"
+BUILD_DATE = "2025-03-09"
 
 # Check for environment variables that might override the version
 # This is useful for CI/CD pipelines like GitHub Actions
