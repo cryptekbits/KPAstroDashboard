@@ -244,6 +244,61 @@ def wait_for_workflow_completion(version, timeout=6000):
                 
                 if tag_runs:
                     print(f"Workflow for tag {tag_name} has started!")
+                    
+                    # Monitor the found workflow's status
+                    completed_runs = [run for run in tag_runs if run.get("status") == "completed" and run.get("conclusion") == "success"]
+                    if completed_runs:
+                        print(f"Workflow for tag {tag_name} already completed successfully!")
+                        return True
+                        
+                    in_progress_runs = [run for run in tag_runs if run.get("status") in ["in_progress", "queued", "waiting"]]
+                    if in_progress_runs:
+                        run_id = in_progress_runs[0].get("databaseId")
+                        print(f"Workflow for tag {tag_name} is in progress. Monitoring its status...")
+                        print(f"Run ID: {run_id}")
+                        
+                        # Monitor the workflow status until it completes or times out
+                        workflow_start_time = time.time()
+                        while time.time() - workflow_start_time < timeout:
+                            # Get the current status of the workflow
+                            status_result = subprocess.run(
+                                ["gh", "run", "view", str(run_id), "--repo", repo_info, "--json", "status,conclusion"],
+                                cwd=root_dir,
+                                capture_output=True,
+                                text=True,
+                                check=False
+                            )
+                            
+                            if status_result.returncode == 0:
+                                run_info = json.loads(status_result.stdout)
+                                status = run_info.get("status")
+                                conclusion = run_info.get("conclusion")
+                                
+                                print(f"Current status: {status}, Conclusion: {conclusion}")
+                                
+                                if status == "completed":
+                                    if conclusion == "success":
+                                        print(f"Workflow completed successfully!")
+                                        return True
+                                    else:
+                                        print(f"Workflow completed with conclusion: {conclusion}")
+                                        proceed = input(CONTINUE_PROMPT)
+                                        if proceed.lower() == 'y':
+                                            return True
+                                        else:
+                                            print(ABORT_MESSAGE)
+                                            return False
+                            
+                            print("Continuing to wait...")
+                            time.sleep(30)
+                        
+                        print(f"Timeout reached after {timeout} seconds.")
+                        proceed = input(CONTINUE_PROMPT)
+                        if proceed.lower() == 'y':
+                            return True
+                        else:
+                            print(ABORT_MESSAGE)
+                            return False
                     break
             
             if not tag_runs:

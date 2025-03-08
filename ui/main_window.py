@@ -26,6 +26,7 @@ class KPAstrologyApp(QMainWindow):
     """
 
     def __init__(self):
+        """Initialize the main window."""
         super().__init__()
         
         # Create tabs and components
@@ -33,7 +34,7 @@ class KPAstrologyApp(QMainWindow):
         self.config_tab = ConfigTab(self)
         self.info_tab = InfoTab(self)
         
-        # Initialize thread
+        self.is_generating = False  # Add flag to track if generation is in progress
         self.generator_thread = None
         
         self.initUI()
@@ -117,7 +118,18 @@ class KPAstrologyApp(QMainWindow):
             traceback.print_exc()
 
     def generate_data(self):
-        """Generate data and create Excel file."""
+        """Generate data and create Excel file, or stop generation if already in progress."""
+        
+        # If generation is already in progress, stop it
+        if self.is_generating and self.generator_thread is not None:
+            self.generator_thread.terminate()
+            self.main_tab.progress_bar.setValue(0)
+            self.main_tab.status_label.setText("Generation stopped")
+            self.main_tab.generate_btn.setText("Generate Excel")
+            self.main_tab.generate_btn.setEnabled(True)
+            self.is_generating = False
+            return
+        
         try:
             # Get selected sheets
             selected_sheets = self.main_tab.get_selected_sheets()
@@ -235,12 +247,11 @@ class KPAstrologyApp(QMainWindow):
                     logging.info(f"Showing yogas for a single day: {yoga_start_date.addDays(1).toString('yyyy-MM-dd')}")
 
             # Disable UI during generation
-            self.main_tab.generate_btn.setEnabled(False)
+            self.main_tab.generate_btn.setEnabled(True)  # Keep button enabled to allow stopping
+            self.main_tab.generate_btn.setText("Stop Generating")
+            self.is_generating = True
             self.main_tab.progress_bar.setValue(0)
             self.main_tab.status_label.setText("Initializing...")
-
-            # Get configuration settings
-            config_settings = self.config_tab.get_config_settings()
 
             # Start the generator thread
             logging.info("Starting generator thread")
@@ -265,7 +276,9 @@ class KPAstrologyApp(QMainWindow):
             logging.error(error_msg)
             logging.error(traceback.format_exc())
             self.show_error(error_msg)
+            self.main_tab.generate_btn.setText("Generate Excel")
             self.main_tab.generate_btn.setEnabled(True)
+            self.is_generating = False
 
     def update_progress(self, value, status):
         """
@@ -292,6 +305,11 @@ class KPAstrologyApp(QMainWindow):
             Dictionary of sheet names to dataframes
         """
         try:
+            # Reset generation flag and button text
+            self.is_generating = False
+            self.main_tab.generate_btn.setText("Generate Excel")
+            self.main_tab.generate_btn.setEnabled(True)
+
             # Get export file settings from configuration
             export_settings = {}
             try:
@@ -346,9 +364,10 @@ class KPAstrologyApp(QMainWindow):
 
             self.main_tab.status_label.setText("Export complete!")
 
-            # Show success message
-            QMessageBox.information(self, "Export Complete",
-                                    f"Data has been exported to {filepath}")
+            # Show information on completion
+            logging.info("Excel file successfully created")
+            QMessageBox.information(self, "Success", 
+                                    f"Excel file '{filepath}' has been successfully created.")
 
             # Check if auto-open is enabled in settings
             auto_open = True
@@ -363,28 +382,32 @@ class KPAstrologyApp(QMainWindow):
                     logging.warning(f"Failed to open {filepath}")
 
         except Exception as e:
-            error_msg = f"Failed to export to Excel: {str(e)}"
+            error_msg = f"Error exporting to Excel: {str(e)}"
             logging.error(error_msg)
             logging.error(traceback.format_exc())
-            QMessageBox.critical(self, "Export Error", error_msg)
-        finally:
-            # Re-enable UI
+            self.show_error(error_msg)
+            
+            # Make sure button is reset in case of error
+            self.is_generating = False
+            self.main_tab.generate_btn.setText("Generate Excel")
             self.main_tab.generate_btn.setEnabled(True)
-            self.main_tab.status_label.setText("Ready")
 
     def show_error(self, error_message):
         """
-        Show an error message dialog.
+        Show error message to the user.
 
         Parameters:
         -----------
         error_message : str
             Error message to display
         """
+        # Reset button if error occurred during generation
+        if self.is_generating:
+            self.is_generating = False
+            self.main_tab.generate_btn.setText("Generate Excel")
+            self.main_tab.generate_btn.setEnabled(True)
         logging.error(f"Application error: {error_message}")
         QMessageBox.critical(self, "Error", error_message)
-        self.main_tab.generate_btn.setEnabled(True)
-        self.main_tab.status_label.setText("Error occurred")
 
     def check_for_updates(self):
         """Manually check for updates."""

@@ -243,6 +243,7 @@ class KPDataGenerator:
             The end date for yoga calculation
         progress_callback : function, optional
             Callback function to report progress (receives current_progress, total, message)
+            If callback returns False, the calculation will be stopped
         time_interval : float, optional
             Time interval in hours between yoga calculations (default: 1)
             Can be fractional for minute-level precision (e.g., 1/60 for 1 minute)
@@ -280,8 +281,13 @@ class KPDataGenerator:
             with progress_lock:
                 checks_done += increment
                 if progress_callback:
-                    progress_callback(checks_done, total_checks, 
+                    # Call the progress callback and check if processing should stop
+                    result = progress_callback(checks_done, total_checks, 
                                      f"Processed {checks_done}/{total_checks:.0f} time points")
+                    # If callback returns False, we should stop processing
+                    if result is False:
+                        return False
+            return True
 
         # Track the active yogas by their unique signature
         active_yogas = {}
@@ -309,6 +315,11 @@ class KPDataGenerator:
             chunk_checks_done = 0
             
             while current_date <= end_point:
+                # Check for cancellation after processing each time point
+                if track_progress(0) is False:  # Just check without incrementing progress
+                    print("Yoga calculation cancelled by user")
+                    return []  # Return empty list to cancel processing
+                    
                 try:
                     # Generate chart data for this date
                     chart_data = self.create_chart_data(current_date)
@@ -423,16 +434,14 @@ class KPDataGenerator:
                 except Exception as e:
                     print(f"Error calculating yogas for {current_date}: {str(e)}")
 
-                # Convert time_interval from hours to timedelta
-                # This handles fractional hours (e.g., 1/60 for 1 minute)
-                hours = int(time_interval)
-                minutes = int((time_interval - hours) * 60)
-                current_date += timedelta(hours=hours, minutes=minutes)
+                # Move to the next time point
+                current_date += timedelta(hours=time_interval)
                 chunk_checks_done += 1
                 
-                # Update progress occasionally
-                if chunk_checks_done % 10 == 0:
-                    track_progress(10)
+                # Update progress (returns False if processing should stop)
+                if track_progress(1) is False:
+                    print("Yoga calculation cancelled by user")
+                    return []
             
             # Handle any yogas still active at the end of the chunk
             for yoga_key, yoga_entry in local_active_yogas.items():
@@ -447,10 +456,6 @@ class KPDataGenerator:
                         yoga_entry["End Date"] = end_point.strftime("%d/%m/%y")
                         yoga_entry["End Time"] = end_point.strftime("%I:%M %p") 
                     local_yogas.append(yoga_entry)
-            
-            # Update progress for any remaining checks
-            if chunk_checks_done % 10 != 0:
-                track_progress(chunk_checks_done % 10)
             
             return local_yogas
         
