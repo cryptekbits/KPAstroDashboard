@@ -197,6 +197,8 @@ jobs:
     - name: Build Windows executable
       run: |
         python tools/build_windows_exe.py --onefile
+        echo "Listing contents of dist directory:"
+        Get-ChildItem -Path dist -Recurse | Format-Table -Property FullName
         
     - name: Upload Windows executable
       uses: actions/upload-artifact@v4
@@ -231,6 +233,11 @@ jobs:
         with:
           path: all-artifacts
           
+      - name: Debug artifacts
+        run: |
+          echo "Listing all downloaded artifacts:"
+          find all-artifacts -type f | sort
+          
       - name: Prepare artifacts for release
         run: |
           mkdir -p release-artifacts
@@ -252,6 +259,19 @@ jobs:
           echo "Preparing Windows executable..."
           find all-artifacts/windows-executable -name "*.exe" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}.exe \; || echo "No Windows executable found"
           find all-artifacts/windows-executable-zip -name "*.zip" -type f -exec cp {} release-artifacts/KPAstrologyDashboard-${VERSION}-Windows.zip \; || echo "No Windows executable ZIP found"
+          
+          # Add more detailed error checking for Windows executable
+          if [ ! -f "release-artifacts/KPAstrologyDashboard-${VERSION}.exe" ]; then
+            echo "ERROR: Windows executable not found in artifacts!"
+            echo "Searching for any .exe files in all-artifacts:"
+            find all-artifacts -name "*.exe" -type f
+          fi
+          
+          if [ ! -f "release-artifacts/KPAstrologyDashboard-${VERSION}-Windows.zip" ]; then
+            echo "ERROR: Windows executable ZIP not found in artifacts!"
+            echo "Searching for any .zip files in all-artifacts:"
+            find all-artifacts -name "*.zip" -type f
+          fi
           
           # Create a macOS .command file (which is double-clickable)
           echo "Creating double-clickable macOS installer..."

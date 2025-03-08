@@ -53,6 +53,7 @@ def main():
         "--add-data=resources;resources",
         "--add-data=flatlib;flatlib",
         "--add-data=yogas;yogas",
+        "--add-data=astro_engine/data;astro_engine/data",
         "--add-data=config.json;.",
     ]
     

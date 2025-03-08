@@ -368,6 +368,24 @@ def download_workflow_artifacts(version, repo_info, root_dir):
         for artifact in artifacts:
             print(f"  - {artifact.relative_to(artifacts_dir)}")
         
+        # Search for specific file types
+        print("\nSearching for specific file types:")
+        print("EXE files:")
+        for exe_file in artifacts_dir.glob("**/*.exe"):
+            print(f"  - {exe_file.relative_to(artifacts_dir)}")
+        
+        print("ZIP files:")
+        for zip_file in artifacts_dir.glob("**/*.zip"):
+            print(f"  - {zip_file.relative_to(artifacts_dir)}")
+        
+        print("BAT files:")
+        for bat_file in artifacts_dir.glob("**/*.bat"):
+            print(f"  - {bat_file.relative_to(artifacts_dir)}")
+        
+        print("SH files:")
+        for sh_file in artifacts_dir.glob("**/*.sh"):
+            print(f"  - {sh_file.relative_to(artifacts_dir)}")
+        
         # Prepare the artifacts for release
         release_dir = root_dir / "release"
         release_dir.mkdir(exist_ok=True)
@@ -404,19 +422,36 @@ def download_workflow_artifacts(version, repo_info, root_dir):
             
         # Windows executable
         windows_exes = list(artifacts_dir.glob("**/windows-executable/*.exe"))
+        if not windows_exes:
+            # Try a more flexible search pattern
+            windows_exes = list(artifacts_dir.glob("**/*.exe"))
+            print(f"Using flexible search pattern for Windows executable, found {len(windows_exes)} files")
+            
         if windows_exes:
             win_exe = windows_exes[0]
             target_path = release_dir / f"KPAstrologyDashboard-{version}.exe"
             shutil.copy(win_exe, target_path)
             print(f"Prepared Windows executable: {target_path}")
+        else:
+            print("WARNING: No Windows executable found!")
             
         # Windows executable ZIP
         windows_exe_zips = list(artifacts_dir.glob("**/windows-executable-zip/*.zip"))
+        if not windows_exe_zips:
+            # Try a more flexible search pattern, but exclude source-code.zip
+            windows_exe_zips = [
+                zip_file for zip_file in artifacts_dir.glob("**/*.zip") 
+                if "source-code" not in str(zip_file)
+            ]
+            print(f"Using flexible search pattern for Windows executable ZIP, found {len(windows_exe_zips)} files")
+            
         if windows_exe_zips:
             win_exe_zip = windows_exe_zips[0]
             target_path = release_dir / f"KPAstrologyDashboard-{version}-Windows.zip"
             shutil.copy(win_exe_zip, target_path)
             print(f"Prepared Windows executable ZIP: {target_path}")
+        else:
+            print("WARNING: No Windows executable ZIP found!")
         
         return True
     except Exception as e:
