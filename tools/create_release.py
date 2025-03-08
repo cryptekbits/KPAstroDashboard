@@ -196,7 +196,12 @@ def wait_for_workflow_completion(version, timeout=1800):
     except Exception as e:
         print(f"Error getting repository information: {e}")
         print("Skipping workflow check and proceeding with release.")
-        return True
+        proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+        if proceed.lower() == 'y':
+            return True
+        else:
+            print("Aborting release process.")
+            return False
     
     # First check if there are any workflows running for this tag
     try:
@@ -216,6 +221,33 @@ def wait_for_workflow_completion(version, timeout=1800):
         
         if not tag_runs:
             print(f"No workflow runs found for tag {tag_name}. Waiting for workflow to start...")
+            # Wait for the workflow to start
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                time.sleep(10)
+                result = subprocess.run(
+                    ["gh", "run", "list", "--repo", repo_info, "--json", "status,name,headBranch,databaseId,conclusion"],
+                    cwd=root_dir,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                runs = json.loads(result.stdout)
+                tag_runs = [run for run in runs if run.get("headBranch") == tag_name or (run.get("name") == "build" and "tags" in run.get("headBranch", ""))]
+                
+                if tag_runs:
+                    print(f"Workflow for tag {tag_name} has started!")
+                    break
+            
+            if not tag_runs:
+                print(f"Timeout reached while waiting for workflow to start after {timeout} seconds.")
+                proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+                if proceed.lower() == 'y':
+                    return True
+                else:
+                    print("Aborting release process.")
+                    return False
         else:
             # Check if any of the runs are already completed successfully
             completed_runs = [run for run in tag_runs if run.get("status") == "completed" and run.get("conclusion") == "success"]
@@ -259,17 +291,27 @@ def wait_for_workflow_completion(version, timeout=1800):
                                     return True
                                 else:
                                     print("Aborting release process.")
-                                    sys.exit(1)
+                                    return False
                     
                     print("Continuing to wait...")
                     time.sleep(30)
+                
+                print(f"Timeout reached after {timeout} seconds.")
+                proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+                if proceed.lower() == 'y':
+                    return True
+                else:
+                    print("Aborting release process.")
+                    return False
     
     except Exception as e:
         print(f"Error checking workflow status: {e}")
-    
-    # Wait for the workflow to complete
-    print(f"Timeout reached after {timeout} seconds. Proceeding anyway.")
-    return True  # Return True to continue with release process even if timeout
+        proceed = input("Do you want to continue with the release process anyway? (y/n): ")
+        if proceed.lower() == 'y':
+            return True
+        else:
+            print("Aborting release process.")
+            return False
 
 
 def update_github_release(version):
@@ -295,16 +337,32 @@ def update_github_release(version):
             "Accept": "application/vnd.github.v3+json"
         }
         
-        # Get release by tag
-        release_url = f"https://api.github.com/repos/{repo_info}/releases/tags/{release_tag}"
-        response = requests.get(release_url, headers=headers)
-        
+        # Try multiple times to get the release, as it might take a moment to appear
+        max_attempts = 5
+        attempt = 0
         release_id = None
-        if response.status_code == 200:
-            existing_release = response.json()
-            release_id = existing_release["id"]
-            print(f"Release {release_tag} already exists. Updating it...")
+        
+        while attempt < max_attempts:
+            # Get release by tag
+            release_url = f"https://api.github.com/repos/{repo_info}/releases/tags/{release_tag}"
+            response = requests.get(release_url, headers=headers)
             
+            if response.status_code == 200:
+                existing_release = response.json()
+                release_id = existing_release["id"]
+                print(f"Release {release_tag} found. Updating it...")
+                break
+            else:
+                attempt += 1
+                if attempt < max_attempts:
+                    print(f"Release {release_tag} not found (attempt {attempt}/{max_attempts}). Waiting for it to be created...")
+                    time.sleep(10)  # Wait 10 seconds before trying again
+                else:
+                    print(f"Release {release_tag} not found after {max_attempts} attempts.")
+                    print(f"You can manually update the release notes once the workflow has completed.")
+                    return False
+        
+        if release_id:
             # Update release with new release notes
             update_data = {
                 "body": get_release_notes()
@@ -319,12 +377,9 @@ def update_github_release(version):
             else:
                 print(f"Failed to update release: {response.status_code} - {response.text}")
                 return False
-            
-        else:
-            print(f"Release {release_tag} not found. It may still be in the process of being created by the workflow.")
-            print(f"You can manually update the release notes once the workflow has completed.")
-            return False
         
+        return False
+            
     except Exception as e:
         print(f"Error updating GitHub release: {e}")
         return False
@@ -442,7 +497,10 @@ def main():
         if not args.no_wait:
             # Wait for GitHub Actions workflow to complete
             print("\nStep 2: Waiting for GitHub Actions workflow to complete...")
-            wait_for_workflow_completion(args.version, args.timeout)
+            workflow_success = wait_for_workflow_completion(args.version, args.timeout)
+            if not workflow_success:
+                print("Aborting release process due to workflow issues.")
+                return
         
         # Update GitHub release with release notes
         print("\nStep 3: Updating GitHub release with release notes...")
