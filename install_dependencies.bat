@@ -48,19 +48,19 @@ echo Detected Python version: %PYTHON_VERSION%
 
 :: Map Python version to wheel version
 set "CP_VER="
-if "%PYTHON_VERSION%"=="3.9" set "CP_VER=cp39-cp39"
-if "%PYTHON_VERSION%"=="3.10" set "CP_VER=cp310-cp310"
-if "%PYTHON_VERSION%"=="3.11" set "CP_VER=cp311-cp311"
-if "%PYTHON_VERSION%"=="3.12" set "CP_VER=cp312-cp312"
-if "%PYTHON_VERSION%"=="3.13" set "CP_VER=cp313-cp313"
+if "!PYTHON_VERSION!"=="3.9" set "CP_VER=cp39-cp39"
+if "!PYTHON_VERSION!"=="3.10" set "CP_VER=cp310-cp310"
+if "!PYTHON_VERSION!"=="3.11" set "CP_VER=cp311-cp311"
+if "!PYTHON_VERSION!"=="3.12" set "CP_VER=cp312-cp312"
+if "!PYTHON_VERSION!"=="3.13" set "CP_VER=cp313-cp313"
 
 :: Try to find architecture-appropriate wheel
 set "ARCH=win_amd64"
 if defined CP_VER (
-    set "WHEEL_PATH=%INSTALL_DIR%\wheels\%ARCH%\pyswisseph-2.10.3.2-%CP_VER%-%ARCH%.whl"
-    if exist "%WHEEL_PATH%" (
-        echo Found local wheel: %WHEEL_PATH%
-        python -m pip install "%WHEEL_PATH%" --no-deps
+    set "WHEEL_PATH=%INSTALL_DIR%\wheels\!ARCH!\pyswisseph-2.10.3.2-!CP_VER!-!ARCH!.whl"
+    if exist "!WHEEL_PATH!" (
+        echo Found local wheel: !WHEEL_PATH!
+        python -m pip install "!WHEEL_PATH!" --no-deps
         if %ERRORLEVEL% EQU 0 (
             echo Successfully installed pyswisseph from local wheel.
             goto setup_ephemeris
@@ -71,8 +71,8 @@ if defined CP_VER (
             exit /b 1
         )
     ) else (
-        echo No matching local wheel found for Python %PYTHON_VERSION% on %ARCH%
-        echo Expected wheel path: %WHEEL_PATH%
+        echo No matching local wheel found for Python !PYTHON_VERSION! on !ARCH!
+        echo Expected wheel path: !WHEEL_PATH!
         echo Please ensure the appropriate wheel is available for your system.
         pause
         exit /b 1
@@ -112,7 +112,7 @@ for %%F in (%REQUIRED_FILES%) do (
     )
 )
 
-if "%MISSING_FILES%"=="true" (
+if "!MISSING_FILES!"=="true" (
     echo.
     echo Some required Swiss Ephemeris files are missing from the source directory.
     echo Please ensure the application package is complete.

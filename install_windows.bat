@@ -70,26 +70,26 @@ if %ERRORLEVEL% EQU 0 (
     echo Found: %PYTHON_VERSION_OUTPUT%
     
     :: Extract version number from output (format: "Python X.Y.Z")
-    for /f "tokens=2" %%V in ("%PYTHON_VERSION_OUTPUT%") do set CURRENT_PYTHON_VERSION=%%V
+    for /f "tokens=2" %%V in ("!PYTHON_VERSION_OUTPUT!") do set CURRENT_PYTHON_VERSION=%%V
     
     :: Check if CURRENT_PYTHON_VERSION is empty
-    if "%CURRENT_PYTHON_VERSION%"=="" (
+    if "!CURRENT_PYTHON_VERSION!"=="" (
         echo Error: Failed to detect Python version.
         for /f "tokens=*" %%V in ('python --version 2^>^&1') do echo Python output: %%V
         echo Assuming Python version does not meet requirements.
         set PYTHON_NEEDS_UPGRADE=true
     ) else (
         :: Compare versions using PowerShell
-        powershell -Command "$current = [version]'%CURRENT_PYTHON_VERSION%'; $required = [version]'%REQUIRED_PYTHON_VERSION%'; if ($current -ge $required) { exit 0 } else { exit 1 }"
+        powershell -Command "$current = [version]'!CURRENT_PYTHON_VERSION!'; $required = [version]'%REQUIRED_PYTHON_VERSION%'; if ($current -ge $required) { exit 0 } else { exit 1 }"
         
         if %ERRORLEVEL% EQU 0 (
-            echo Python version %CURRENT_PYTHON_VERSION% meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
+            echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
         ) else (
             :: If PowerShell comparison fails, try a simple batch comparison as fallback
             echo PowerShell version comparison failed, trying fallback method...
             
             :: Extract major, minor, patch versions
-            for /f "tokens=1,2,3 delims=." %%a in ("%CURRENT_PYTHON_VERSION%") do (
+            for /f "tokens=1,2,3 delims=." %%a in ("!CURRENT_PYTHON_VERSION!") do (
                 set CURRENT_MAJOR=%%a
                 set CURRENT_MINOR=%%b
                 set CURRENT_PATCH=%%c
@@ -102,26 +102,26 @@ if %ERRORLEVEL% EQU 0 (
             )
             
             :: Compare major version
-            if %CURRENT_MAJOR% GTR %REQUIRED_MAJOR% (
-                echo Python version %CURRENT_PYTHON_VERSION% meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
-            ) else if %CURRENT_MAJOR% EQU %REQUIRED_MAJOR% (
+            if !CURRENT_MAJOR! GTR !REQUIRED_MAJOR! (
+                echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
+            ) else if !CURRENT_MAJOR! EQU !REQUIRED_MAJOR! (
                 :: Compare minor version
-                if %CURRENT_MINOR% GTR %REQUIRED_MINOR% (
-                    echo Python version %CURRENT_PYTHON_VERSION% meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
-                ) else if %CURRENT_MINOR% EQU %REQUIRED_MINOR% (
+                if !CURRENT_MINOR! GTR !REQUIRED_MINOR! (
+                    echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
+                ) else if !CURRENT_MINOR! EQU !REQUIRED_MINOR! (
                     :: Compare patch version
-                    if %CURRENT_PATCH% GEQ %REQUIRED_PATCH% (
-                        echo Python version %CURRENT_PYTHON_VERSION% meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
+                    if !CURRENT_PATCH! GEQ !REQUIRED_PATCH! (
+                        echo Python version !CURRENT_PYTHON_VERSION! meets the requirement ^(^>= %REQUIRED_PYTHON_VERSION%^)
                     ) else (
-                        echo Python version %CURRENT_PYTHON_VERSION% is older than required version %REQUIRED_PYTHON_VERSION%
+                        echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
                         set PYTHON_NEEDS_UPGRADE=true
                     )
                 ) else (
-                    echo Python version %CURRENT_PYTHON_VERSION% is older than required version %REQUIRED_PYTHON_VERSION%
+                    echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
                     set PYTHON_NEEDS_UPGRADE=true
                 )
             ) else (
-                echo Python version %CURRENT_PYTHON_VERSION% is older than required version %REQUIRED_PYTHON_VERSION%
+                echo Python version !CURRENT_PYTHON_VERSION! is older than required version %REQUIRED_PYTHON_VERSION%
                 set PYTHON_NEEDS_UPGRADE=true
             )
         )
@@ -129,17 +129,17 @@ if %ERRORLEVEL% EQU 0 (
 )
 
 :: Install or upgrade Python if needed
-if "%PYTHON_INSTALLED%"=="false" (
+if "!PYTHON_INSTALLED!"=="false" (
     echo Python not found. Installing Python %REQUIRED_PYTHON_VERSION%...
     set INSTALL_PYTHON=true
-) else if "%PYTHON_NEEDS_UPGRADE%"=="true" (
+) else if "!PYTHON_NEEDS_UPGRADE!"=="true" (
     echo Upgrading Python to version %REQUIRED_PYTHON_VERSION%...
     set INSTALL_PYTHON=true
 ) else (
     set INSTALL_PYTHON=false
 )
 
-if "%INSTALL_PYTHON%"=="true" (
+if "!INSTALL_PYTHON!"=="true" (
     :: Create a temporary directory for the installer
     mkdir %TEMP%\kp_dashboard_setup > nul 2>&1
     cd %TEMP%\kp_dashboard_setup
@@ -210,23 +210,23 @@ echo Installing pyswisseph from wheels directory...
 for /f "tokens=2" %%i in ('python -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"') do (
     set "PYTHON_VERSION=%%i"
 )
-echo Detected Python version: %PYTHON_VERSION%
+echo Detected Python version: !PYTHON_VERSION!
 
 :: Map Python version to wheel version
 set "CP_VER="
-if "%PYTHON_VERSION%"=="3.9" set "CP_VER=cp39-cp39"
-if "%PYTHON_VERSION%"=="3.10" set "CP_VER=cp310-cp310"
-if "%PYTHON_VERSION%"=="3.11" set "CP_VER=cp311-cp311"
-if "%PYTHON_VERSION%"=="3.12" set "CP_VER=cp312-cp312"
-if "%PYTHON_VERSION%"=="3.13" set "CP_VER=cp313-cp313"
+if "!PYTHON_VERSION!"=="3.9" set "CP_VER=cp39-cp39"
+if "!PYTHON_VERSION!"=="3.10" set "CP_VER=cp310-cp310"
+if "!PYTHON_VERSION!"=="3.11" set "CP_VER=cp311-cp311"
+if "!PYTHON_VERSION!"=="3.12" set "CP_VER=cp312-cp312"
+if "!PYTHON_VERSION!"=="3.13" set "CP_VER=cp313-cp313"
 
 :: Try to find architecture-appropriate wheel
 set "ARCH=win_amd64"
 if defined CP_VER (
-    set "WHEEL_PATH=%INSTALL_DIR%\wheels\%ARCH%\pyswisseph-2.10.3.2-%CP_VER%-%ARCH%.whl"
-    if exist "%WHEEL_PATH%" (
-        echo Found local wheel: %WHEEL_PATH%
-        python -m pip install "%WHEEL_PATH%" --no-deps
+    set "WHEEL_PATH=%INSTALL_DIR%\wheels\!ARCH!\pyswisseph-2.10.3.2-!CP_VER!-!ARCH!.whl"
+    if exist "!WHEEL_PATH!" (
+        echo Found local wheel: !WHEEL_PATH!
+        python -m pip install "!WHEEL_PATH!" --no-deps
         if %ERRORLEVEL% EQU 0 (
             echo Successfully installed pyswisseph from local wheel.
         ) else (
@@ -236,8 +236,8 @@ if defined CP_VER (
             exit /b 1
         )
     ) else (
-        echo No matching local wheel found for Python %PYTHON_VERSION% on %ARCH%
-        echo Expected wheel path: %WHEEL_PATH%
+        echo No matching local wheel found for Python !PYTHON_VERSION! on !ARCH!
+        echo Expected wheel path: !WHEEL_PATH!
         echo Please ensure the appropriate wheel is available for your system.
         pause
         exit /b 1
@@ -287,7 +287,7 @@ for %%F in (%REQUIRED_FILES%) do (
     )
 )
 
-if "%MISSING_FILES%"=="true" (
+if "!MISSING_FILES!"=="true" (
     echo.
     echo Some required Swiss Ephemeris files are missing from the source directory.
     echo Please ensure the application package is complete.
