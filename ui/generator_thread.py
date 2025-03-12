@@ -55,6 +55,7 @@ class GeneratorThread(QThread):
         self.yoga_settings = yoga_settings
         self.selected_date = selected_date
         self.config_settings = config_settings or {}
+        self.should_stop = False  # Flag to indicate if generation should be stopped
 
     def run(self):
         try:
@@ -178,6 +179,11 @@ class GeneratorThread(QThread):
             # Process each planet transition
             for planet in planets:
                 if planet in self.sheets_to_generate:
+                    # Check if thread should stop
+                    if self.isInterruptionRequested():
+                        logging.info("Generation interrupted by user")
+                        return
+                        
                     self.progress_signal.emit(current_progress, f"Generating {planet} data...")
                     
                     # Get planet transition data
@@ -205,6 +211,11 @@ class GeneratorThread(QThread):
 
             # Calculate Yogas if included
             if "Yogas" in self.sheets_to_generate and self.yoga_settings:
+                # Check if thread should stop
+                if self.isInterruptionRequested():
+                    logging.info("Generation interrupted by user")
+                    return
+                    
                 self.progress_signal.emit(current_progress, "Calculating Yogas...")
 
                 yoga_start_date = self.yoga_settings["start_date"]
@@ -215,6 +226,10 @@ class GeneratorThread(QThread):
 
                 # Define a progress callback for yoga calculations
                 def yoga_progress_callback(current, total, message):
+                    # Check if thread should stop
+                    if self.isInterruptionRequested():
+                        return False  # Tell the generator to stop processing
+                        
                     # Calculate percentage based on current/total
                     if total > 0:
                         progress_percent = current / total * 30  # 30% of progress bar for yogas
@@ -332,4 +347,9 @@ class GeneratorThread(QThread):
             error_msg = f"Error during data generation: {str(e)}"
             logging.error(error_msg)
             logging.error(traceback.format_exc())
-            self.error_signal.emit(error_msg) 
+            self.error_signal.emit(error_msg)
+        finally:
+            # Clean up if the thread was terminated
+            if self.isInterruptionRequested():
+                logging.info("Generator thread was interrupted and is cleaning up")
+                self.progress_signal.emit(0, "Generation stopped") 

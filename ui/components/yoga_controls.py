@@ -60,8 +60,8 @@ class YogaControls:
             self.yoga_start_date.setObjectName("yoga_start_date")
             self.yoga_start_date.setCalendarPopup(True)
 
-            # Set default to 7 days before current date
-            default_start_date = QDate.currentDate().addDays(-7)
+            # Set default to yesterday
+            default_start_date = QDate.currentDate().addDays(-1)
             self.yoga_start_date.setDate(default_start_date)
 
         yoga_start_layout.addWidget(self.yoga_start_date)
@@ -77,8 +77,8 @@ class YogaControls:
             self.yoga_end_date.setObjectName("yoga_end_date")
             self.yoga_end_date.setCalendarPopup(True)
 
-            # Set default to 14 days after current date
-            default_end_date = QDate.currentDate().addDays(14)
+            # Set default to tomorrow
+            default_end_date = QDate.currentDate().addDays(1)
             self.yoga_end_date.setDate(default_end_date)
 
         yoga_end_layout.addWidget(self.yoga_end_date)

@@ -19,7 +19,7 @@ import requests
 from packaging import version
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtWidgets import QMessageBox
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Import version information
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
@@ -29,6 +29,8 @@ from version import VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
 # GitHub API URL for branches
 GITHUB_BRANCHES_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/branches/"
+# GitHub API URL for tags
+GITHUB_TAGS_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/tags"
 
 # Current version
 CURRENT_VERSION = VERSION
@@ -102,27 +104,73 @@ class UpdateChecker(QObject):
     def check_develop_branch(self):
         """Check if the develop branch has newer commits than current version"""
         try:
+            # Get the latest tag first
+            response = requests.get(f"{GITHUB_TAGS_API_URL}?per_page=1", timeout=10)
+            response.raise_for_status()
+            
+            tags = response.json()
+            if not tags:
+                self.logger.warning("No tags found in the repository")
+                # No tags available, check if develop branch has commits
+                self._check_develop_branch_commits()
+                return
+                
+            # Get the latest tag details
+            latest_tag = tags[0]
+            latest_tag_name = latest_tag['name']
+            self.logger.info(f"Latest tag: {latest_tag_name}")
+            
+            # Clean up version strings for comparison
+            latest_tag_version = latest_tag_name.lstrip('v')
+            current_clean_version = CURRENT_VERSION.split('-')[0]  # Remove any -dev suffix
+            
+            # If current version is not the latest tag, we don't need to check develop
+            if self._is_newer_version(latest_tag_version, current_clean_version):
+                self.logger.info(f"There's already a newer tag available: {latest_tag_name}")
+                return
+                
+            # Current version is latest tag, check if develop branch is ahead
+            self._check_develop_branch_commits()
+                
+        except Exception as e:
+            self.logger.error(f"Error checking develop branch: {str(e)}")
+            
+    def _check_develop_branch_commits(self):
+        """Check if the develop branch has commits newer than the latest tag"""
+        try:
             # Get develop branch information
             response = requests.get(f"{GITHUB_BRANCHES_API_URL}develop", timeout=10)
             response.raise_for_status()
             
             develop_branch = response.json()
+            latest_commit_sha = develop_branch['commit']['sha']
             latest_commit_date = develop_branch['commit']['commit']['author']['date']
             
-            # Convert to datetime
+            # Get the latest release information
+            response = requests.get(GITHUB_API_URL, timeout=10)
+            response.raise_for_status()
+            
+            release_info = response.json()
+            release_date = release_info.get('published_at')
+            
+            if not release_date:
+                self.logger.warning("No release date found, assuming develop branch has updates")
+                self.dev_update_available.emit()
+                return
+                
+            # Convert dates to datetime objects
             commit_date = datetime.strptime(latest_commit_date, "%Y-%m-%dT%H:%M:%SZ")
+            release_date = datetime.strptime(release_date, "%Y-%m-%dT%H:%M:%SZ")
             
-            # Compare with build date
-            current_build_date = datetime.strptime(BUILD_DATE, "%Y-%m-%d")
-            
-            if commit_date > current_build_date:
+            # Check if the develop branch has newer commits than the latest release
+            if commit_date > release_date:
                 self.logger.info(f"Develop branch has newer commits: {latest_commit_date}")
                 self.dev_update_available.emit()
             else:
-                self.logger.info("Develop branch is not ahead of current version")
+                self.logger.info("Develop branch is not ahead of latest release")
                 
         except Exception as e:
-            self.logger.error(f"Error checking develop branch: {str(e)}")
+            self.logger.error(f"Error checking develop branch commits: {str(e)}")
     
     def _is_newer_version(self, latest_version, current_version):
         """
@@ -334,93 +382,188 @@ class UpdateDownloader(QObject):
             python_cmd = "python"
         else:
             exe_name = "main.py"
+            python_cmd = "python"
         
         # Create batch file for the update process
         updater_path = os.path.join(temp_dir, "kp_dashboard_updater.bat")
         
+        # Parse the version from the download path
+        import re
+        version_match = re.search(r'v(\d+\.\d+\.\d+)', download_path)
+        version = version_match.group(1) if version_match else "unknown"
+        
+        # Calculate the GitHub extracted folder name (usually includes the version)
+        extract_folder_name = f"KPAstroDashboard-{version}"
+        source_folder = os.path.join(extract_dir, "extracted", extract_folder_name)
+        
         with open(updater_path, 'w') as file:
             file.write(f"""@echo off
 echo Waiting for application to close...
-timeout /t 2 /nobreak > nul
+:: Wait for the application to close completely
+timeout /t 3 /nobreak > nul
+
+:: Get process ID of the script to prevent killing itself
+for /f "tokens=2" %%a in ('tasklist /nh /fi "imagename eq {exe_name}" ^| find /i "{exe_name}"') do (
+    set PID=%%a
+    echo Found application process with PID: %%a
+    taskkill /F /PID %%a
+)
 
 echo Extracting update...
+:: Create clean extraction directories
 if exist "{extract_dir}" rmdir /S /Q "{extract_dir}"
-powershell -command "Expand-Archive -Path '{download_path}' -DestinationPath '{extract_dir}' -Force"
+mkdir "{extract_dir}"
+mkdir "{extract_dir}\\extracted"
+
+:: Extract the update using PowerShell 
+powershell -command "Expand-Archive -Path '{download_path}' -DestinationPath '{extract_dir}\\extracted' -Force"
 
 echo Backing up user config...
-copy "{app_dir}\\config.json" "{temp_dir}\\config_backup.json"
+:: Backup the current config file
+if exist "{app_dir}\\config.json" (
+    copy "{app_dir}\\config.json" "{temp_dir}\\config_backup.json"
+)
+
+echo Checking extract directory structure...
+:: Check if the extraction was successful
+if not exist "{source_folder}" (
+    echo Error: Extracted folder not found at {source_folder}
+    dir "{extract_dir}\\extracted"
+    goto ERROR
+)
 
 echo Merging configurations...
+:: Merge configurations using PowerShell
 powershell -Command "
 try {{
-    # Load current config
-    $currentConfig = Get-Content '{app_dir}\\config.json' | ConvertFrom-Json
-    
-    # Load new config
-    $newConfig = Get-Content '{extract_dir}\\config.json' | ConvertFrom-Json
-    
-    # Create a function to merge objects recursively
-    function Merge-Objects($current, $new) {{
-        $merged = $current.PSObject.Copy()
-        foreach ($property in $new.PSObject.Properties) {{
-            $propertyName = $property.Name
-            if (-not ($merged.PSObject.Properties.Name -contains $propertyName)) {{
-                # Add new fields from the new config
-                $merged | Add-Member -MemberType NoteProperty -Name $propertyName -Value $property.Value
-            }} elseif ($merged.$propertyName -is [PSCustomObject] -and $property.Value -is [PSCustomObject]) {{
-                # Recursively merge nested objects
-                $merged.$propertyName = Merge-Objects $merged.$propertyName $property.Value
+    # Check if both config files exist
+    if ((Test-Path '{app_dir}\\config.json') -and (Test-Path '{source_folder}\\config.json')) {{
+        # Load current config
+        $currentConfig = Get-Content '{app_dir}\\config.json' | ConvertFrom-Json
+        
+        # Load new config
+        $newConfig = Get-Content '{source_folder}\\config.json' | ConvertFrom-Json
+        
+        # Create a function to merge objects recursively
+        function Merge-Objects($current, $new) {{
+            $merged = $current.PSObject.Copy()
+            foreach ($property in $new.PSObject.Properties) {{
+                $propertyName = $property.Name
+                if (-not ($merged.PSObject.Properties.Name -contains $propertyName)) {{
+                    # Add new fields from the new config
+                    $merged | Add-Member -MemberType NoteProperty -Name $propertyName -Value $property.Value
+                }} elseif ($merged.$propertyName -is [PSCustomObject] -and $property.Value -is [PSCustomObject]) {{
+                    # Recursively merge nested objects
+                    $merged.$propertyName = Merge-Objects $merged.$propertyName $property.Value
+                }}
+                # Keep existing values for existing fields
             }}
-            # Keep existing values for existing fields
+            return $merged
         }}
-        return $merged
+        
+        # Merge the configs
+        $mergedConfig = Merge-Objects $currentConfig $newConfig
+        
+        # Save merged config to the backup location
+        $mergedConfig | ConvertTo-Json -Depth 100 | Set-Content '{temp_dir}\\config_merged.json'
+        Write-Host 'Config files merged successfully'
+    }} else {{
+        Write-Host 'One or both config files not found - skipping merge'
+        if (Test-Path '{app_dir}\\config.json') {{
+            Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+        }}
     }}
-    
-    # Merge the configs
-    $mergedConfig = Merge-Objects $currentConfig $newConfig
-    
-    # Save merged config to the backup location
-    $mergedConfig | ConvertTo-Json -Depth 100 | Set-Content '{temp_dir}\\config_merged.json'
-    Write-Host 'Config files merged successfully'
 }} catch {{
     Write-Host 'Error merging config files: $_'
     Write-Host 'Keeping original config file'
-    Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+    if (Test-Path '{app_dir}\\config.json') {{
+        Copy-Item '{app_dir}\\config.json' '{temp_dir}\\config_merged.json'
+    }}
 }}"
 
 echo Checking for new requirements...
-if exist "{extract_dir}\\requirements.txt" (
-    powershell -Command "(Get-Content '{extract_dir}\\requirements.txt') -replace '; platform_system==\"Windows\"', '' -replace '; platform_system==\"Darwin\"', '' | Set-Content '{extract_dir}\\requirements_clean.txt'"
-    
+if exist "{source_folder}\\requirements.txt" (
     echo Installing any new requirements...
-    cd /d "{extract_dir}"
-    python -m pip install -r requirements_clean.txt --upgrade
+    cd /d "{source_folder}"
+    {python_cmd} -m pip install -r requirements.txt --upgrade
 )
 
-echo Updating application files...
+echo Creating backup of current application...
 :: First, back up the entire app directory
 xcopy /E /I /Y "{app_dir}" "{temp_dir}\\kp_dashboard_backup"
 
-:: Now copy the new files
-xcopy /E /I /Y "{extract_dir}\\*" "{app_dir}"
+echo Updating application files...
+:: Now copy the new files from the correct source folder
+xcopy /E /I /Y "{source_folder}\\*" "{app_dir}"
 
+echo Restoring configuration...
 :: Restore the merged config
-copy "{temp_dir}\\config_merged.json" "{app_dir}\\config.json"
+if exist "{temp_dir}\\config_merged.json" (
+    copy "{temp_dir}\\config_merged.json" "{app_dir}\\config.json"
+)
 
 echo Cleaning up...
+:: Delete temporary files
 rmdir /S /Q "{extract_dir}"
 del "{download_path}"
 
 echo Starting application...
-cd "{app_dir}"
-start "" "{os.path.join(app_dir, exe_name)}"
+:: Start the updated application
+cd /d "{app_dir}"
+start "" "{app_dir}\\{exe_name}"
 
-echo Update completed successfully!
+:: Check if application launched successfully by waiting briefly and checking if the process exists
+timeout /t 3 /nobreak > nul
+tasklist /fi "imagename eq {exe_name}" | find /i "{exe_name}" > nul
+if %ERRORLEVEL% EQU 0 (
+    echo Updated Successfully. Press any key to continue...
+    pause > nul
+) else (
+    echo Application failed to start. Restoring from backup...
+    if exist "{temp_dir}\\kp_dashboard_backup" (
+        xcopy /E /I /Y "{temp_dir}\\kp_dashboard_backup" "{app_dir}"
+        echo Application has been restored from backup.
+    )
+    pause
+)
+
+echo Cleaning up temporary files...
+:: Delete backup and temporary files
+if exist "{temp_dir}\\kp_dashboard_backup" (
+    rmdir /S /Q "{temp_dir}\\kp_dashboard_backup"
+)
+if exist "{temp_dir}\\config_backup.json" (
+    del "{temp_dir}\\config_backup.json"
+)
+if exist "{temp_dir}\\config_merged.json" (
+    del "{temp_dir}\\config_merged.json"
+)
+
+:: Delete this batch file
 del "%~f0"
+exit /b 0
+
+:ERROR
+echo Update failed. Restoring from backup...
+if exist "{temp_dir}\\kp_dashboard_backup" (
+    xcopy /E /I /Y "{temp_dir}\\kp_dashboard_backup" "{app_dir}"
+)
+echo Application has been restored from backup.
+pause
+exit /b 1
 """)
         
-        # Run the updater
-        subprocess.Popen(["cmd", "/c", updater_path], creationflags=subprocess.CREATE_NO_WINDOW)
+        # We need to use shell=True for Windows to properly run the batch file
+        try:
+            if platform.system() == "Windows":
+                # Use CREATE_NO_WINDOW flag to hide the console window
+                subprocess.Popen(["cmd", "/c", updater_path], creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                # Fallback for testing on non-Windows systems
+                subprocess.Popen(["cmd", "/c", updater_path])
+        except Exception as e:
+            self.logger.error(f"Error executing update script: {str(e)}")
+            raise
         
         # Exit the application
         sys.exit(0)
@@ -532,8 +675,38 @@ rm "{download_path}"
 
 echo "Starting application..."
 {start_cmd} &
+APP_PID=$!
 
-echo "Update completed successfully!"
+# Wait briefly for application to start
+sleep 3
+
+# Check if application is running
+if ps -p $APP_PID > /dev/null; then
+    echo "Updated Successfully. Press any key to continue..."
+    read -n 1 -s
+else
+    echo "Application failed to start. Restoring from backup..."
+    # Restore from backup if available
+    if [ -d "{temp_dir}/kp_dashboard_backup" ]; then
+        cp -R "{temp_dir}/kp_dashboard_backup/"* "{app_dir}/"
+        echo "Application has been restored from backup."
+    fi
+    read -p "Press any key to continue..." -n 1 -s
+fi
+
+echo "Cleaning up temporary files..."
+# Delete backup and temporary files
+if [ -d "{temp_dir}/kp_dashboard_backup" ]; then
+    rm -rf "{temp_dir}/kp_dashboard_backup"
+fi
+if [ -f "{temp_dir}/config_backup.json" ]; then
+    rm "{temp_dir}/config_backup.json"
+fi
+if [ -f "{temp_dir}/config_merged.json" ]; then
+    rm "{temp_dir}/config_merged.json"
+fi
+
+# Delete this script
 rm "$0"
 """)
         

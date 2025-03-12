@@ -2,8 +2,8 @@
 
 | Branch   | Version                                                                                | Status                                                                                                                                                                  | Python |
 | :------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- |
-| `master` | ![version](https://img.shields.io/badge/version-1.4.0-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
-| `develop` | ![version](https://img.shields.io/badge/version-1.4.0-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| `master` | ![version](https://img.shields.io/badge/version-2.2.0-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| `develop` | ![version](https://img.shields.io/badge/version-2.2.0-green) | [![build](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/cryptekbits/KPAstroDashboard/actions/workflows/build.yml) | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
 
 # KP Astrology Dashboard
 
@@ -48,6 +48,16 @@ pip install -r requirements.txt
 # Run the application
 python main.py
 ```
+
+### Dependencies
+
+The application requires the following key dependencies:
+
+- Python 3.13.2 or higher
+- pyswisseph 2.10.3.2 or higher (Swiss Ephemeris library)
+- PyQt5 5.15.0 or higher (GUI framework)
+- polars-lts-cpu 1.23.0 or higher (Data processing)
+- Other dependencies as listed in requirements.txt
 
 ## Building from Source
 
@@ -96,6 +106,50 @@ git push origin v1.2.0
 ```
 
 This will trigger a build and automatically create a release with Windows and macOS executables.
+
+## Building Windows Executable
+
+To build a Windows executable using PyInstaller, follow these steps:
+
+1. Install PyInstaller and all dependencies:
+   ```
+   pip install -r requirements.txt
+   pip install pyinstaller
+   ```
+
+2. Run the build script:
+   ```
+   python tools/build_windows_exe.py
+   ```
+
+   This will create a standalone executable in the `dist` directory.
+
+3. For a single-file executable, use the `--onefile` option:
+   ```
+   python tools/build_windows_exe.py --onefile
+   ```
+
+4. For debugging build issues, use the `--debug` option:
+   ```
+   python tools/build_windows_exe.py --debug
+   ```
+
+The executable will be created in the `dist` directory with the name `KPAstrologyDashboard-{VERSION}.exe`.
+
+### Automatic Builds
+
+Windows executables are automatically built by GitHub Actions when a new release is created. The executable is included in the GitHub release assets.
+
+To create a new release with the Windows executable:
+
+1. Run the release creation script:
+   ```
+   python tools/create_release.py
+   ```
+
+2. Follow the prompts to create a new release.
+
+3. The GitHub Actions workflow will build the Windows executable and add it to the release.
 
 ## Usage
 
@@ -184,25 +238,25 @@ When cross-compiling the application (especially on Apple Silicon Macs), you mig
 ### Common Issues:
 
 1. **PyQt5 Installation**: PyQt5 requires Qt libraries to be installed on the system.
-2. **Native Extensions**: Packages like `pyswisseph` (required by `flatlib`) need a C compiler.
+2. **Native Extensions**: Packages like `pyswisseph` require a C compiler and appropriate build tools.
 3. **Platform-specific Packages**: Some packages like `polars` and `numpy` may have issues when cross-compiled.
 
 ### Solutions:
 
-1. **Use Docker with Proper Dependencies**: 
+1. **Install Build Tools**: 
+   - Windows: Install Microsoft Visual C++ Build Tools
+   - macOS: Install Xcode Command Line Tools (`xcode-select --install`)
+   - Linux: Install build-essential package (`apt install build-essential`)
+
+2. **Use Docker with Proper Dependencies**: 
    ```bash
    python build.py --clean --target-platform windows --target-arch x64 --alt-win-image
    ```
 
-2. **Build on Native Platforms**: For best results, build each platform's executable on that platform:
+3. **Build on Native Platforms**: For best results, build each platform's executable on that platform:
    - Windows: Build on a Windows machine
    - Linux: Build on a Linux machine
    - macOS: Build on a Mac
-
-3. **Simplified Builds**: If you only need a subset of features, consider creating a simplified version:
-   ```bash
-   python build.py --clean --no-cross-platform
-   ```
 
 ## Latest Version
 

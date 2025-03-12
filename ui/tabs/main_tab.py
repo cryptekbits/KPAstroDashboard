@@ -365,7 +365,8 @@ class MainTab:
     def save_default(self):
         """
         Save the current user selections as default settings.
-        This will save location, date, time, selected sheets, yoga settings, and aspect settings.
+        This will save location, selected sheets, yoga time interval, and aspect settings,
+        but not date or time values as these should default to today/current time.
         """
         try:
             import json
@@ -386,23 +387,19 @@ class MainTab:
             # Save location
             config['user_defaults']['location'] = self.location_combo.currentText()
             
-            # Save date and time
-            config['user_defaults']['date'] = self.date_picker.date().toString("yyyy-MM-dd")
-            config['user_defaults']['time'] = self.time_picker.time().toString("hh:mm")
+            # We do NOT save date and time as they should default to today and 9:00 AM
             
             # Save selected sheets
             config['user_defaults']['selected_sheets'] = self.get_selected_sheets()
             
-            # Save yoga settings
-            yoga_start_date = self.yoga_controls.yoga_start_date.date().toString("yyyy-MM-dd") if self.yoga_controls.yoga_start_date else None
-            yoga_end_date = self.yoga_controls.yoga_end_date.date().toString("yyyy-MM-dd") if self.yoga_controls.yoga_end_date else None
+            # Save yoga settings - only save time interval, not dates
             yoga_time_interval = self.yoga_controls.yoga_time_interval.currentText() if self.yoga_controls.yoga_time_interval else None
             
-            config['user_defaults']['yoga'] = {
-                'start_date': yoga_start_date,
-                'end_date': yoga_end_date,
-                'time_interval': yoga_time_interval
-            }
+            if 'yoga' not in config['user_defaults']:
+                config['user_defaults']['yoga'] = {}
+                
+            config['user_defaults']['yoga']['time_interval'] = yoga_time_interval
+            # We do NOT save yoga start_date and end_date as they should default to yesterday and tomorrow
             
             # Save aspect settings
             config['user_defaults']['aspects'] = self.aspect_controls.get_selected_aspects()
@@ -458,6 +455,25 @@ class MainTab:
         Apply the loaded default settings to the UI components.
         This should be called after the UI components are created.
         """
+        # Set default date to today and time to 9:00 AM, regardless of saved settings
+        if self.date_picker:
+            from PyQt5.QtCore import QDate
+            self.date_picker.setDate(QDate.currentDate())
+            
+        if self.time_picker:
+            from PyQt5.QtCore import QTime
+            self.time_picker.setTime(QTime(9, 0))
+            
+        # Set default yoga date range to yesterday to tomorrow
+        if self.yoga_controls.yoga_start_date:
+            from PyQt5.QtCore import QDate
+            self.yoga_controls.yoga_start_date.setDate(QDate.currentDate().addDays(-1))
+            
+        if self.yoga_controls.yoga_end_date:
+            from PyQt5.QtCore import QDate
+            self.yoga_controls.yoga_end_date.setDate(QDate.currentDate().addDays(1))
+            
+        # If no saved defaults, return after setting the built-in defaults
         if not self.default_settings:
             return
             
@@ -467,23 +483,9 @@ class MainTab:
                 index = self.location_combo.findText(self.default_settings['location'])
                 if index >= 0:
                     self.location_combo.setCurrentIndex(index)
-                    
-            # Apply date
-            if 'date' in self.default_settings and self.date_picker:
-                from PyQt5.QtCore import QDate
-                date_str = self.default_settings['date']
-                date = QDate.fromString(date_str, "yyyy-MM-dd")
-                if date.isValid():
-                    self.date_picker.setDate(date)
-                    
-            # Apply time
-            if 'time' in self.default_settings and self.time_picker:
-                from PyQt5.QtCore import QTime
-                time_str = self.default_settings['time']
-                time = QTime.fromString(time_str, "hh:mm")
-                if time.isValid():
-                    self.time_picker.setTime(time)
-                    
+                   
+            # We no longer apply date and time from saved settings
+            
             # Apply selected sheets
             if 'selected_sheets' in self.default_settings and self.sheet_checkboxes:
                 selected_sheets = self.default_settings['selected_sheets']
@@ -495,26 +497,10 @@ class MainTab:
                     if sheet_name in self.sheet_checkboxes:
                         self.sheet_checkboxes[sheet_name].setChecked(True)
                         
-            # Apply yoga settings
+            # Apply yoga settings - only apply time interval, not dates
             if 'yoga' in self.default_settings:
                 yoga_defaults = self.default_settings['yoga']
                 
-                # Apply yoga start date
-                if 'start_date' in yoga_defaults and yoga_defaults['start_date'] and self.yoga_controls.yoga_start_date:
-                    from PyQt5.QtCore import QDate
-                    date_str = yoga_defaults['start_date']
-                    date = QDate.fromString(date_str, "yyyy-MM-dd")
-                    if date.isValid():
-                        self.yoga_controls.yoga_start_date.setDate(date)
-                        
-                # Apply yoga end date
-                if 'end_date' in yoga_defaults and yoga_defaults['end_date'] and self.yoga_controls.yoga_end_date:
-                    from PyQt5.QtCore import QDate
-                    date_str = yoga_defaults['end_date']
-                    date = QDate.fromString(date_str, "yyyy-MM-dd")
-                    if date.isValid():
-                        self.yoga_controls.yoga_end_date.setDate(date)
-                        
                 # Apply yoga time interval
                 if 'time_interval' in yoga_defaults and yoga_defaults['time_interval'] and self.yoga_controls.yoga_time_interval:
                     index = self.yoga_controls.yoga_time_interval.findText(yoga_defaults['time_interval'])

@@ -6,7 +6,7 @@ echo ===================================================
 echo.
 
 :: Set version and GitHub repo information
-set VERSION=##VERSION##
+set VERSION=1.6.3
 set REPO_OWNER=cryptekbits
 set REPO_NAME=KPAstroDashboard
 set DOWNLOAD_URL=https://github.com/%REPO_OWNER%/%REPO_NAME%/archive/refs/tags/v%VERSION%.zip
@@ -79,59 +79,8 @@ echo Installation directory will be: %INSTALL_DIR%
 echo Download directory will be: %DOWNLOADS_DIR%
 echo.
 
-:: Check if the application is already installed
-set APP_INSTALLED=false
-if exist "%INSTALL_DIR%\main.py" (
-    set APP_INSTALLED=true
-    echo.
-    echo KP Astrology Dashboard is already installed at:
-    echo %INSTALL_DIR%
-    echo.
-    echo What would you like to do?
-    echo 1. Update existing installation (preserves user configuration)
-    echo 2. Perform a clean reinstall (removes all files and settings)
-    echo 3. Exit without changes
-    echo.
-    
-    set /p INSTALL_CHOICE=Your choice (1-3): 
-    
-    if "!INSTALL_CHOICE!"=="3" (
-        echo Installation cancelled by user.
-        pause
-        exit /b 0
-    )
-    
-    if "!INSTALL_CHOICE!"=="2" (
-        echo.
-        echo Performing clean reinstall...
-        echo Removing existing installation...
-        
-        :: Backup config.json if it exists
-        if exist "%INSTALL_DIR%\config.json" (
-            echo Backing up user configuration...
-            copy "%INSTALL_DIR%\config.json" "%TEMP%\kp_dashboard_config_backup.json" >nul
-            echo Configuration backed up to: %TEMP%\kp_dashboard_config_backup.json
-        )
-        
-        :: Remove existing installation
-        rmdir /S /Q "%INSTALL_DIR%"
-        mkdir "%INSTALL_DIR%"
-    )
-    
-    if "!INSTALL_CHOICE!"=="1" (
-        echo.
-        echo Updating existing installation...
-        echo Important files and user settings will be preserved.
-        
-        :: Create a temporary directory for update files
-        set "UPDATE_TEMP=%TEMP%\kp_dashboard_update"
-        if exist "!UPDATE_TEMP!" rmdir /S /Q "!UPDATE_TEMP!"
-        mkdir "!UPDATE_TEMP!"
-    )
-) else (
-    :: Create installation directory if it doesn't exist
-    if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-)
+:: Create installation directory if it doesn't exist
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
 :: Check if zip file already exists from a previous download
 set LOCAL_ZIP_FILE=%DOWNLOADS_DIR%\KPAstrologyDashboard-%VERSION%.zip
@@ -176,25 +125,28 @@ if %FILE_SIZE% EQU 0 (
     exit /b 1
 )
 
-:: Set up extraction based on whether we're doing an update or reinstall
-if "!INSTALL_CHOICE!"=="1" (
-    :: For update, extract to temporary location first
-    set "TEMP_EXTRACT_DIR=!UPDATE_TEMP!\extract"
-) else (
-    :: For clean install or new install, use standard temp location
-    set "TEMP_EXTRACT_DIR=%TEMP%\KPAstrologyDashboard-extract"
+:: Check if files were already extracted to the destination
+if exist "%INSTALL_DIR%\main.py" (
+    echo.
+    echo Application files already exist in destination folder.
+    echo Would you like to re-extract the files? (Y/N)
+    set /p EXTRACT_CHOICE=Your choice: 
+    
+    if /i not "!EXTRACT_CHOICE!"=="Y" goto skip_extraction
 )
 
-:: Clean previous extraction directory if it exists
-if exist "!TEMP_EXTRACT_DIR!" (
-    echo Cleaning previous temporary extraction directory...
-    rmdir /S /Q "!TEMP_EXTRACT_DIR!"
-)
-
-:: Extract using PowerShell
+:: Extract the zip file
 echo.
 echo Extracting files...
-powershell -Command "& { $ErrorActionPreference = 'Stop'; try { Write-Host 'Extracting archive...' -ForegroundColor Cyan; Expand-Archive -Path '%LOCAL_ZIP_FILE%' -DestinationPath '!TEMP_EXTRACT_DIR!' -Force; Write-Host 'Extraction successful.' -ForegroundColor Green; } catch { Write-Host ('Extraction error: ' + $_.Exception.Message) -ForegroundColor Red; exit 1; } }"
+:: Check if temp extraction dir already exists and contains files
+set "TEMP_EXTRACT_DIR=%TEMP%\KPAstrologyDashboard-extract"
+if exist "%TEMP_EXTRACT_DIR%" (
+    echo Cleaning previous temporary extraction directory...
+    rmdir /S /Q "%TEMP_EXTRACT_DIR%"
+)
+
+:: Extract using PowerShell with simplified error handling
+powershell -Command "& { $ErrorActionPreference = 'Stop'; try { Write-Host 'Extracting archive...' -ForegroundColor Cyan; Expand-Archive -Path '%LOCAL_ZIP_FILE%' -DestinationPath '%TEMP_EXTRACT_DIR%' -Force; Write-Host 'Extraction successful.' -ForegroundColor Green; } catch { Write-Host ('Extraction error: ' + $_.Exception.Message) -ForegroundColor Red; exit 1; } }"
 
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to extract the application package.
@@ -202,65 +154,13 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Move files based on installation type
+:: Move files from the nested directory (GitHub creates a versioned folder)
 echo.
-if "!INSTALL_CHOICE!"=="1" (
-    echo Updating files in installation directory...
-    
-    :: Identify the GitHub extracted folder (it will be KPAstroDashboard-VERSION)
-    for /d %%G in ("!TEMP_EXTRACT_DIR!\*") do (
-        set "SOURCE_DIR=%%G"
-    )
-    
-    :: Backup important user files
-    echo Backing up user configuration...
-    if exist "%INSTALL_DIR%\config.json" (
-        copy "%INSTALL_DIR%\config.json" "!UPDATE_TEMP!\config.json.bak" >nul
-    )
-    
-    :: Files to preserve during update
-    set "PRESERVE_FILES=config.json kp_astrology.log app_startup.log"
-    
-    :: Copy new files, skipping the preserved files
-    echo Copying new application files...
-    for /f "delims=" %%F in ('dir /b /a-d "!SOURCE_DIR!\*"') do (
-        set "SKIP_FILE=false"
-        for %%P in (%PRESERVE_FILES%) do (
-            if "%%F"=="%%P" set "SKIP_FILE=true"
-        )
-        
-        if "!SKIP_FILE!"=="false" (
-            copy "!SOURCE_DIR!\%%F" "%INSTALL_DIR%\" >nul
-        )
-    )
-    
-    :: Copy directories
-    for /f "delims=" %%D in ('dir /b /ad "!SOURCE_DIR!\*"') do (
-        :: Skip logs directory
-        if not "%%D"=="logs" (
-            if exist "%INSTALL_DIR%\%%D" (
-                rmdir /S /Q "%INSTALL_DIR%\%%D"
-            )
-            xcopy "!SOURCE_DIR!\%%D" "%INSTALL_DIR%\%%D\" /E /I /Y >nul
-        )
-    )
-    
-    echo Update completed successfully.
-) else (
-    :: Regular installation - copy all files from the extracted folder
-    echo Moving files to installation directory...
-    :: Find the extracted folder (it will be KPAstroDashboard-VERSION)
-    for /d %%G in ("!TEMP_EXTRACT_DIR!\*") do (
-        echo Copying from: %%G
-        xcopy "%%G\*" "%INSTALL_DIR%" /E /I /Y
-    )
-    
-    :: Restore config.json if doing a clean reinstall and a backup exists
-    if "!INSTALL_CHOICE!"=="2" if exist "%TEMP%\kp_dashboard_config_backup.json" (
-        echo Restoring user configuration...
-        copy "%TEMP%\kp_dashboard_config_backup.json" "%INSTALL_DIR%\config.json" >nul
-        echo Configuration restored.
-    )
+echo Moving files to installation directory...
+:: Find the extracted folder (it will be KPAstroDashboard-VERSION)
+for /d %%G in ("%TEMP_EXTRACT_DIR%\*") do (
+    echo Copying from: %%G
+    xcopy "%%G\*" "%INSTALL_DIR%" /E /I /Y
 )
 
 :: Check if requirements.txt exists, create it if not
@@ -280,12 +180,10 @@ if not exist "%INSTALL_DIR%\requirements.txt" (
     echo Created requirements.txt file.
 )
 
-:: Clean up temp extraction directories
-if "!INSTALL_CHOICE!"=="1" (
-    rmdir /S /Q "!UPDATE_TEMP!"
-) else (
-    rmdir /S /Q "!TEMP_EXTRACT_DIR!"
-)
+:: Clean up temp extraction directory
+rmdir /S /Q "%TEMP_EXTRACT_DIR%"
+
+:skip_extraction
 
 :: Change to the installation directory
 cd /d "%INSTALL_DIR%"
@@ -471,7 +369,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Setup Swiss Ephemeris files - test functionality first
+:: Setup Swiss Ephemeris files
 echo.
 echo Setting up Swiss Ephemeris files...
 set SWEFILES_DIR=%INSTALL_DIR%\flatlib\resources\swefiles
@@ -504,15 +402,13 @@ if "!MISSING_FILES!"=="true" (
     echo Some required Swiss Ephemeris files are missing from the source directory.
     echo Please ensure the application package is complete.
     goto skip_ephemeris
-)
-
-if "!MISSING_FILES!"=="false" (
+) else (
     echo All required ephemeris files are present in the application directory.
 )
 
 :: Check if system-wide Swiss Ephemeris directory exists
 echo.
-echo Checking system-wide Swiss Ephemeris configuration...
+echo Checking for system-wide Swiss Ephemeris directory...
 if not exist "%SYSTEM_SWEFILES_DIR%" (
     echo System-wide Swiss Ephemeris directory not found.
     echo Would you like to create it and copy the ephemeris files? (Y/N)
@@ -543,45 +439,30 @@ if not exist "%SYSTEM_SWEFILES_DIR%" (
         echo Skipping system-wide Swiss Ephemeris setup.
     )
 ) else (
-    :: Check if files exist in the system directory
-    set "SYSTEM_MISSING_FILES=false"
-    for %%F in (%REQUIRED_FILES%) do (
-        if not exist "%SYSTEM_SWEFILES_DIR%\%%F" (
-            set "SYSTEM_MISSING_FILES=true"
-            goto check_missing_done
-        )
-    )
+    echo System-wide Swiss Ephemeris directory already exists.
+    echo Would you like to update the ephemeris files? (Y/N)
+    set /p UPDATE_CHOICE=Your choice: 
     
-    :check_missing_done
-    if "!SYSTEM_MISSING_FILES!"=="true" (
-        echo System-wide Swiss Ephemeris directory exists but some files are missing.
-        echo Would you like to update the ephemeris files? (Y/N)
-        set /p UPDATE_CHOICE=Your choice: 
+    if /i "!UPDATE_CHOICE!"=="Y" (
+        :: Create a temporary admin script
+        echo @echo off > "%TEMP%\sweadmin.bat"
+        echo echo Updating system-wide Swiss Ephemeris files... >> "%TEMP%\sweadmin.bat"
         
-        if /i "!UPDATE_CHOICE!"=="Y" (
-            :: Create a temporary admin script
-            echo @echo off > "%TEMP%\sweadmin.bat"
-            echo echo Updating system-wide Swiss Ephemeris files... >> "%TEMP%\sweadmin.bat"
-            
-            for %%F in (%REQUIRED_FILES%) do (
-                echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
-            )
-            
-            echo echo. >> "%TEMP%\sweadmin.bat"
-            echo echo System-wide Swiss Ephemeris files update complete. >> "%TEMP%\sweadmin.bat"
-            
-            :: Run the script with admin privileges
-            echo Requesting administrator privileges...
-            powershell -Command "Start-Process -FilePath '%TEMP%\sweadmin.bat' -Verb RunAs -Wait"
-            
-            :: Clean up
-            del "%TEMP%\sweadmin.bat"
-        ) else (
-            echo Skipping system-wide Swiss Ephemeris update.
+        for %%F in (%REQUIRED_FILES%) do (
+            echo if exist "%SWEFILES_DIR%\%%F" copy /Y "%SWEFILES_DIR%\%%F" "%SYSTEM_SWEFILES_DIR%\%%F" >> "%TEMP%\sweadmin.bat"
         )
+        
+        echo echo. >> "%TEMP%\sweadmin.bat"
+        echo echo System-wide Swiss Ephemeris files update complete. >> "%TEMP%\sweadmin.bat"
+        
+        :: Run the script with admin privileges
+        echo Requesting administrator privileges...
+        powershell -Command "Start-Process -FilePath '%TEMP%\sweadmin.bat' -Verb RunAs -Wait"
+        
+        :: Clean up
+        del "%TEMP%\sweadmin.bat"
     ) else (
-        echo System-wide Swiss Ephemeris directory exists with all required files.
-        echo No actions needed.
+        echo Skipping system-wide Swiss Ephemeris update.
     )
 )
 

@@ -6,9 +6,9 @@ import os
 from datetime import datetime
 
 # Default version information
-VERSION = "1.4.0"
-VERSION_NAME = "AstroInsight-1.3-Stable"
-BUILD_DATE = "2025-03-06"
+VERSION = "2.2.0"
+VERSION_NAME = "AI 2.2.0"
+BUILD_DATE = "2025-03-09"
 
 # Check for environment variables that might override the version
 # This is useful for CI/CD pipelines like GitHub Actions
@@ -21,8 +21,8 @@ if os.environ.get("CI_VERSION"):
         BUILD_DATE = datetime.now().strftime("%Y-%m-%d")
 
 # GitHub repository information
-GITHUB_REPO_OWNER = "cryptekbits"  # Replace with actual GitHub username
-GITHUB_REPO_NAME = "KPAstroDashboard"  # Replace with actual repository name
+GITHUB_REPO_OWNER = "cryptekbits"
+GITHUB_REPO_NAME = "KPAstroDashboard"
 
 # Function to determine if this is a development version
 def is_dev_version():
